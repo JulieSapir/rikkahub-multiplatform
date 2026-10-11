@@ -19,7 +19,8 @@ Click to join our Discord server 👉 [【RikkaHub】](https://discord.gg/9weBqx
 > [!WARNING]
 > 这个分支专注于Linux、Windows、OpenHarmony的适配。
 > 基础UI已经可用，但仍有大量功能需要移植。
-> 此分支不添加新功能！提issue请确保是分支问题
+> 此分支不添加新功能！提issue请确保是分支问题。
+> 不定时rebase
 
 > [!WARNING]
 > This branch focuses on adaptation for Linux, Windows, and OpenHarmony.
@@ -27,7 +28,7 @@ Click to join our Discord server 👉 [【RikkaHub】](https://discord.gg/9weBqx
 > This branch does not add new features! When filing an issue, please make sure it is a branch-specific issue.
 
 <div align="center">
-  <img src="docs/img/poster.png" alt="RikkaHub" width="800" />
+  <img src="docs/img/multiplatform.png" alt="Models Picker" width="450" />
 </div>
 
 ## 🚀 Download
