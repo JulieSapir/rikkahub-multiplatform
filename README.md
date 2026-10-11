@@ -2,6 +2,8 @@
   <img src="docs/icon.png" alt="App Icon" width="100" />
   <h1>RikkaHub</h1>
 
+
+
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/rikkahub/rikkahub)
 [![Ask DeepWiki](https://img.shields.io/badge/zread.ai-blue?style=flat&logo=readthedocs)](https://zread.ai/rikkahub/rikkahub)
 
@@ -12,6 +14,16 @@ Click to join our Discord server 👉 [【RikkaHub】](https://discord.gg/9weBqx
 
 [简体中文](README_ZH_CN.md) | [繁體中文](README_ZH_TW.md) | English
 </div>
+
+> [!WARNING]
+> 这个分支专注于Linux、Windows、OpenHarmony的适配。
+> 基础UI已经可用，但仍有大量功能需要移植。
+> 此分支不添加新功能！提issue请确保是分支问题
+
+> [!WARNING]
+> This branch focuses on adaptation for Linux, Windows, and OpenHarmony.
+> The basic UI is already usable, but many features still need to be ported.
+> This branch does not add new features! When filing an issue, please make sure it is a branch-specific issue.
 
 <div align="center">
   <img src="docs/img/chat.png" alt="Chat Interface" width="150" />
