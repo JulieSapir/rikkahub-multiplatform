@@ -399,6 +399,23 @@ compose.desktop {
     application {
         mainClass = "me.rerere.rikkahub.linux.MainKt"
 
+        // 静止页实测：默认参数 RSS 362MB；下面这几项把它压到 300MB。
+        // 堆只用几十 MB，但默认 MaxHeap 是物理内存的 1/4，G1 的 remembered set 按堆预留大小分配（单占 57MB），
+        // 换 SerialGC 后这项几乎归零。
+        //
+        // AppCDS（AutoCreateSharedArchive）实测把「进程起来→窗口可见」从 911ms 降到 306ms，
+        // RSS 再降到 243MB。归档必须落在可写目录，且 JVM 不会替你把中间目录建出来，
+        // 所以直接放在一定存在的 build/ 下（run 任务的工作目录就是本模块目录，build/ 已在 .gitignore 里）。
+        // 注意：打包分发时这里不会展开 $HOME，若目标机器的 CWD 不可写，JVM 只会告警并照常启动。
+        jvmArgs(
+            "-Xmx512m",
+            "-Xms32m",
+            "-XX:+UseSerialGC",
+            "-XX:MaxMetaspaceSize=128m",
+            "-XX:+AutoCreateSharedArchive",
+            "-XX:SharedArchiveFile=build/rikka-linux.jsa",
+        )
+
         nativeDistributions {
             targetFormats(TargetFormat.AppImage, TargetFormat.Deb)
             packageName = "RikkaHub"

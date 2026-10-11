@@ -131,11 +131,14 @@ val routeActivityRules: List<String> = listOf(
 ).map { spec ->
     "$spec|" +
         "navigation3 的 desktop 变体只有带 SavedStateConfiguration 的重载，桌面端不需要恢复导航栈；" +
-        "JVM 版 Coil 没有 asset:// 与资源 id 的内置映射，往那条 components 链里补两个 Mapper|" +
+        "JVM 版 Coil 没有 asset:// 与资源 id 的内置映射，往那条 components 链里补两个 Mapper；" +
+        "Coil 的内存缓存默认按 maxMemory 的 25% 取，桌面端堆被封顶到 512m，这里显式限死|" +
         "rememberNavBackStack(startScreen)\u0001me.rerere.rikkahub.linux.nav.desktopRememberNavBackStack(startScreen)" +
         "\u0002add(SvgDecoder.Factory(scaleToDensity = true))\u0001add(SvgDecoder.Factory(scaleToDensity = true))\n" +
         "                            add(me.rerere.rikkahub.linux.image.DesktopAssetUriMapper())\n" +
-        "                            add(me.rerere.rikkahub.linux.image.DesktopResourceIdMapper())"
+        "                            add(me.rerere.rikkahub.linux.image.DesktopResourceIdMapper())" +
+        "\u0002.crossfade(true)\u0001.crossfade(true)\n" +
+        "                        .memoryCache { coil3.memory.MemoryCache.Builder().maxSizeBytes(64L * 1024 * 1024).build() }"
 }
 
 val receiveContentRules: List<String> = listOf(
