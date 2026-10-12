@@ -50,6 +50,14 @@ start_display() {
 
 stop_display() { [[ -n "${XVFB_PID:-}" ]] && kill "$XVFB_PID" 2>/dev/null || true; }
 
+# 采集进程在任何退出路径上都要收掉：窗口起不来时 exit 1、后面编译失败、Ctrl+C 都会漏掉
+# 一个占着显存和 X 连接的 JVM。
+cleanup() {
+    [[ -n "${COLLECT_PID:-}" ]] && { kill -TERM "$COLLECT_PID" 2>/dev/null || true; wait "$COLLECT_PID" 2>/dev/null || true; }
+    stop_display
+}
+trap cleanup EXIT
+
 window_up() { xwininfo -root -tree 2>/dev/null | grep -q XCanvasPeer; }
 
 mkdir -p "$WORK"
@@ -63,19 +71,18 @@ if [[ ! -s "$META" || "${1:-}" == "--refresh" ]]; then
     rm -f "$META"
     start_display
     "$GRAAL/bin/java" "${JVM_ARGS[@]}" \
-        -agentlib:native-image-agent=config-output-dir="$WORK",config-write-period-secs=20 \
+        -agentlib:native-image-agent=config-output-dir="$WORK" \
         -cp "$CP" "$APP_MAIN" >"$WORK/collect.log" 2>&1 &
     COLLECT_PID=$!
     for _ in $(seq 1 240); do window_up && break; sleep 1; done
     window_up || { echo "Window not start up during 240s! $WORK/collect.log" >&2; tail -20 "$WORK/collect.log"; exit 1; }
-    # 多等一会儿让 agent 的周期性落盘（20s 一次）覆盖到首屏之后的代码路径
+    # 首屏之后再等一段，覆盖只有交互后才会走到的代码路径
     sleep 45
-    # 这个 app 收到 SIGTERM 不会退出（shutdown 序列起不来），所以给 15s 宽限后强杀；
-    # 元数据靠周期落盘，不依赖退出钩子
+    # 实测 SIGTERM 约 2s 走完 JVM shutdown 钩子，agent 的元数据正是退出时整体落盘，
+    # 所以这里只要优雅终止并回收，不需要定时落盘也不需要强杀。
     kill -TERM "$COLLECT_PID" 2>/dev/null || true
-    for _ in $(seq 1 15); do kill -0 "$COLLECT_PID" 2>/dev/null || break; sleep 1; done
-    kill -9 "$COLLECT_PID" 2>/dev/null || true
     wait "$COLLECT_PID" 2>/dev/null || true
+    COLLECT_PID=
     stop_display
     [[ -s "$META" ]] || { echo "agent haven't write metadata! $WORK/collect.log" >&2; exit 1; }
 else
