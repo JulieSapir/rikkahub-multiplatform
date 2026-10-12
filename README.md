@@ -16,15 +16,15 @@ Click to join our Discord server 👉 [【RikkaHub】](https://discord.gg/9weBqx
 </div>
 
 > [!WARNING]
-> 这个分支专注于Linux、Windows、OpenHarmony的适配。
+> 这个分叉专注于Linux、Windows、OpenHarmony的AOT适配。
 > 基础UI已经可用，但仍有大量功能需要移植。
-> 此分支不添加新功能！提issue请确保是分支问题。
+> 此分叉不添加新功能！提issue请确保是分叉问题。
 > 不定时rebase
 
 > [!WARNING]
-> This branch focuses on adaptation for Linux, Windows, and OpenHarmony.
+> This fork focuses on adaptation for Linux, Windows, and OpenHarmony.
 > The basic UI is already usable, but many features still need to be ported.
-> This branch does not add new features! When filing an issue, please make sure it is a branch-specific issue.
+> This fork does not add new features! When filing an issue, please make sure it is a fork-specific issue.
 
 <div align="center">
   <img src="docs/img/multiplatform.png" alt="Models Picker" width="450" />
