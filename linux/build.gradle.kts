@@ -426,3 +426,18 @@ compose.desktop {
         }
     }
 }
+
+// native-image 需要一份和 :linux:run 完全一致的运行时类路径。写成文件给 aot/build.sh 读，
+// 这样 AOT 流程不必先把应用跑起来再从进程命令行里抓。
+val writeAotClasspath = tasks.register("writeAotClasspath") {
+    dependsOn(tasks.named("jar"))
+    val appJar = files(tasks.named<Jar>("jar").map { it.archiveFile })
+    val cp = files(appJar, configurations.named("runtimeClasspath"))
+    val output = layout.buildDirectory.file("aot/classpath.txt")
+    inputs.files(cp)
+    outputs.file(output)
+    doLast {
+        val text = cp.files.joinToString(":") { it.absolutePath }
+        output.get().asFile.also { it.parentFile.mkdirs() }.writeText(text)
+    }
+}
