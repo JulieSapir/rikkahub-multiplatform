@@ -71,6 +71,8 @@ kotlin {
             exclude("**/ai/util/FileEncoder.kt")
             exclude("**/common/android/ContextUtil.kt")
             exclude("**/utils/ContextUtil.kt")
+            // 内嵌 Web 服务的静态首页：原生镜像里目录也能解析成正文，见 web/EntryJvm.kt
+            exclude("**/web/Entry.kt")
             // 只给 Android Studio 预览用
             exclude("**/highlight/HighlighterPreview.kt")
             // 语音实现走 media3，桌面端只保留设置数据类

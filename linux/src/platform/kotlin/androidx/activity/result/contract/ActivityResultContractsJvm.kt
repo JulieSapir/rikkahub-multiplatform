@@ -159,6 +159,32 @@ private val VIDEO_EXT = setOf("mp4", "mov", "webm", "mkv", "avi")
 
 private val pickerScope = CoroutineScope(SupervisorJob() + Dispatchers.Swing)
 
+/**
+ * 构造选择框这一步会走 Swing 的 LookAndFeel（`UIManager` 按类名反射实例化 `Metal*UI`），
+ * 所以单独拆出来：AOT 采集元数据时也要把同样的路径跑一遍，否则原生包里缺这些反射项，
+ * 运行时表现为「no ComponentUI class for javax.swing.JFileChooser」。
+ */
+internal fun buildFileChooser(
+    multiple: Boolean = false,
+    directories: Boolean = false,
+    extensions: Set<String>? = null,
+    save: Boolean = false,
+    suggestedName: String? = null,
+): JFileChooser = JFileChooser().apply {
+    fileSelectionMode = if (directories) JFileChooser.DIRECTORIES_ONLY else JFileChooser.FILES_ONLY
+    isMultiSelectionEnabled = multiple
+    dialogTitle = if (save) "保存文件" else "选择文件"
+    if (save) {
+        selectedFile = File(suggestedName?.substringAfterLast('/').takeUnless { it.isNullOrBlank() } ?: "output.txt")
+    }
+    if (!extensions.isNullOrEmpty()) {
+        fileFilter = FileNameExtensionFilter(
+            extensions.joinToString(" / ").uppercase(),
+            *extensions.toTypedArray(),
+        )
+    }
+}
+
 internal fun pickFiles(
     multiple: Boolean = false,
     directories: Boolean = false,
@@ -168,20 +194,7 @@ internal fun pickFiles(
     callback: (List<File>) -> Unit,
 ) {
     pickerScope.launch {
-        val chooser = JFileChooser().apply {
-            fileSelectionMode = if (directories) JFileChooser.DIRECTORIES_ONLY else JFileChooser.FILES_ONLY
-            isMultiSelectionEnabled = multiple
-            dialogTitle = if (save) "保存文件" else "选择文件"
-            if (save) {
-                selectedFile = File(suggestedName?.substringAfterLast('/').takeUnless { it.isNullOrBlank() } ?: "output.txt")
-            }
-            if (!extensions.isNullOrEmpty()) {
-                fileFilter = FileNameExtensionFilter(
-                    extensions.joinToString(" / ").uppercase(),
-                    *extensions.toTypedArray(),
-                )
-            }
-        }
+        val chooser = buildFileChooser(multiple, directories, extensions, save, suggestedName)
         val outcome = if (save) chooser.showSaveDialog(null) else chooser.showOpenDialog(null)
         if (outcome != JFileChooser.APPROVE_OPTION) {
             callback(emptyList())

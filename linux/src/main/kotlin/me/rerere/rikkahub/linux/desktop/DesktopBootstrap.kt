@@ -3,7 +3,10 @@ package me.rerere.rikkahub.linux.desktop
 import android.content.Context
 import android.util.Log
 import android.widget.Toast
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import me.rerere.common.android.appTempFolder
 import me.rerere.rikkahub.data.datastore.SettingsStore
@@ -50,16 +53,22 @@ object DesktopBootstrap {
     fun afterKoin(context: Context) {
         runCatching { context.appTempFolder.listFiles()?.forEach { it.deleteRecursively() } }
             .onFailure { Log.w(TAG, "清理临时目录失败: ${it.message}") }
-        runCatching {
-            val settings = koin.get<SettingsStore>().settingsFlow.value
-            if (settings.webServerEnabled) {
-                koin.get<WebServerManager>().start(
-                    port = settings.webServerPort,
-                    localhostOnly = settings.webServerLocalhostOnly,
-                )
-            }
-        }.onFailure { Log.w(TAG, "按设置启动 Web 服务失败: ${it.message}") }
+        // 等 DataStore 真的加载完再看开关：settingsFlow.value 在读盘完成前是默认值，
+        // 直接读会让「开机自启 Web 服务」变成一场和磁盘速度的赛跑（实测时好时坏）。
+        scope.launch {
+            runCatching {
+                val settings = koin.get<SettingsStore>().awaitLoaded()
+                if (settings.webServerEnabled) {
+                    koin.get<WebServerManager>().start(
+                        port = settings.webServerPort,
+                        localhostOnly = settings.webServerLocalhostOnly,
+                    )
+                }
+            }.onFailure { Log.w(TAG, "按设置启动 Web 服务失败: ${it.message}") }
+        }
     }
 
     private val koin: Koin get() = GlobalContext.get()
+
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 }

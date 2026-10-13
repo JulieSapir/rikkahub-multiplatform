@@ -3,6 +3,7 @@ package me.rerere.rikkahub.linux
 import androidx.activity.compose.DesktopActivityContent
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -11,6 +12,7 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import me.rerere.rikkahub.RouteActivity
+import me.rerere.rikkahub.linux.desktop.AotWarmup
 import me.rerere.rikkahub.linux.desktop.DesktopBootstrap
 import android.app.Application
 import me.rerere.rikkahub.linux.di.desktopPlatformModule
@@ -52,6 +54,9 @@ private fun ApplicationScope.DesktopWindow(activity: RouteActivity) {
     ) {
         content?.let {
             CompositionLocalProvider(LocalContext provides activity) { it() }
+        }
+        if (AotWarmup.enabled) {
+            LaunchedEffect(Unit) { AotWarmup.exercise() }
         }
     }
 }

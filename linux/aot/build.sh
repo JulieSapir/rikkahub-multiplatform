@@ -6,13 +6,20 @@
 #
 # 中间产物在 linux/build/aot，成品在 build/output/rikka-native。
 #
-# 三件不查就一定会踩的事（全部本机实测）：
+# 四件不查就一定会踩的事（全部本机实测）：
 #  1. 要 GraalVM for JDK 25。21/24 上连纯 java2d 离屏程序都会在 libawt.so 的 JNI_OnLoad 里
 #     FatalError「Could not allocate library name」。
 #  2. 元数据必须把类同时写进 jni 段。只写 reflection 的话界面画得出来，但 AWT 的 XToolkit 线程
 #     FindClass("java/lang/Thread") 抛 NoClassDefFoundError，鼠标点击永远进不到应用。
 #  3. libjawt.so 内联不进可执行文件（AWT 是 dlopen("<java.home>/lib/libjawt.so")，
 #     构建期烘 java.home 会让 native-image 自己崩），所以成品带一个 lib/ 和自定位启动脚本。
+#  4. agent 只记录真正执行过的代码，采集只画到首屏的话，首屏之外的功能会在运行时缺项。
+#     所以采集时带 -Drikka.aot.warmup=true，让 linux/.../desktop/AotWarmup.kt 把文件选择框
+#     （Swing 按类名反射装 LookAndFeel）和内嵌 Web 服务各走一遍。
+#  5. 默认只带采集时用过的 locale，界面会「不报错但长得不一样」：实测日期分组在 JVM 上是
+#     「10月 11」、原生包上变成「Oct 11」。所以 -H:+IncludeAllLocales（成品 +35M；
+#     换 -H:IncludeLocales=zh,en 能省回来，但界面语言再多的就会又静默退回英文）。
+#     时区不用管：native-image 默认已带全（IncludeAllTimeZones 已废弃）。
 #
 # MPTODO: 添加 deb/appimage/flatpak 目标
 set -euo pipefail
@@ -70,7 +77,7 @@ if [[ ! -s "$META" || "${1:-}" == "--refresh" ]]; then
     log "2/4 Use native-image agent to collect metadata"
     rm -f "$META"
     start_display
-    "$GRAAL/bin/java" "${JVM_ARGS[@]}" \
+    "$GRAAL/bin/java" "${JVM_ARGS[@]}" -Drikka.aot.warmup=true \
         -agentlib:native-image-agent=config-output-dir="$WORK" \
         -cp "$CP" "$APP_MAIN" >"$WORK/collect.log" 2>&1 &
     COLLECT_PID=$!
@@ -90,9 +97,36 @@ else
 fi
 
 log "3/4 Complete jni and compile"
-python3 - "$META" <<'PY'
-import json, sys, pathlib
-p = pathlib.Path(sys.argv[1]); m = json.loads(p.read_text())
+python3 - "$META" "$CP" <<'PY'
+import json, sys, zipfile, pathlib
+meta_path, cp = pathlib.Path(sys.argv[1]), sys.argv[2]
+m = json.loads(meta_path.read_text())
+
+# agent 只记录采集时真正碰到的东西，所以「静态可枚举」的两类不靠采集，直接按全量登记：
+#  - @Serializable：判据是 classpath 里存在 Xxx$$serializer（编译器插件生成的），
+#    Ktor 的 content-negotiation 运行期按类型反射找它，缺一个就是一条 500；
+#  - 资源：我们自己按路径读 classpath 的三棵树（前端产物、R 资源、android assets）。
+SERIALIZABLE_SUFFIX = '$$serializer.class'
+serial, resources = m.setdefault('serialization', []), m.setdefault('resources', [])
+have_ser = {e.get('type') for e in serial}
+for jar in cp.split(':'):
+    if not jar.endswith('.jar'):
+        continue
+    try:
+        names = zipfile.ZipFile(jar).namelist()
+    except (OSError, zipfile.BadZipFile):
+        continue
+    for n in names:
+        if n.endswith(SERIALIZABLE_SUFFIX):
+            t = n[: -len(SERIALIZABLE_SUFFIX)].split('$')[0].replace('/', '.')
+            if t not in have_ser:
+                serial.append({'type': t}); have_ser.add(t)
+seen_res = {e.get('glob') for e in resources}
+for g in ('static/**', 'rikka-res/**', 'assets/**'):
+    if g not in seen_res:
+        resources.append({'glob': g}); seen_res.add(g)
+
+# AWT 的 XToolkit 线程要 FindClass，只写 reflection 段会「能看不能点」，所以同步进 jni 段
 ref, jni = m.get('reflection', []), m.setdefault('jni', [])
 have = {e.get('type') for e in jni}
 for e in ref:
@@ -102,13 +136,14 @@ for e in ref:
                     'allDeclaredMethods': True, 'allPublicMethods': True,
                     'allDeclaredFields': True, 'allPublicFields': True, 'allDeclaredClasses': True})
         have.add(t)
-p.write_text(json.dumps(m, indent=1))
-print(f'      reflection {len(ref)} / jni {len(jni)}')
+meta_path.write_text(json.dumps(m, indent=1))
+print(f'      reflection {len(ref)} / jni {len(jni)} / serialization {len(serial)} / resources {len(resources)}')
 PY
 
 rm -rf "$WORK/image" && mkdir -p "$WORK/image"
 (cd "$REPO/linux" && "$GRAAL/bin/native-image" -J-Xmx9g \
     -H:ConfigurationFileDirectories="$WORK" \
+    -H:+IncludeAllLocales \
     --no-fallback -march=compatibility -Djava.awt.headless=false \
     -H:Path="$WORK/image" -cp "$CP" "$APP_MAIN" -o rikka-native) | tail -3
 
