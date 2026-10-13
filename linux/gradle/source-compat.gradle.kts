@@ -169,7 +169,19 @@ val emojiBurstRules: List<String> = listOf(
         "                }\n"
 }
 
-val compatRules: List<String> = contextBuilderRules + assetIconRules + fontLoaderRules + clipboardRules + routeActivityRules + receiveContentRules + emojiBurstRules + listOf(
+/**
+ * 备份恢复后的「重启应用」：Android 上 exitProcess(0) 之后有系统/用户重新拉起，
+ * 桌面端进程一退就什么都没了，所以换成自己按 /proc/self/cmdline 另起一个进程。
+ */
+val restartAppRules: List<String> = listOf(
+    "me/rerere/rikkahub/ui/pages/backup/components|BackupDialog.kt",
+).map { spec ->
+    "$spec|" +
+        "桌面端没有系统帮忙重新拉起进程，exitProcess 等于直接把应用关掉|" +
+        "exitProcess(0)\u0001me.rerere.rikkahub.linux.desktop.DesktopProcess.restart()"
+}
+
+val compatRules: List<String> = contextBuilderRules + assetIconRules + fontLoaderRules + clipboardRules + routeActivityRules + receiveContentRules + emojiBurstRules + restartAppRules + listOf(
     "me/rerere/rikkahub/ui/components/ui|ErrorCard.kt|" +
         "Android 的 ClipEntry(clipData = ...) 具名参数在 JB 端是 nativeClipEntry，位置传参即可|" +
         "clipData =\u0001",

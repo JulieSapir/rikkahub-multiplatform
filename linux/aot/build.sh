@@ -20,6 +20,13 @@
 #     「10月 11」、原生包上变成「Oct 11」。所以 -H:+IncludeAllLocales（成品 +35M；
 #     换 -H:IncludeLocales=zh,en 能省回来，但界面语言再多的就会又静默退回英文）。
 #     时区不用管：native-image 默认已带全（IncludeAllTimeZones 已废弃）。
+#  6. AWT 的 native 库会在任意一次 X11 事件里 FindClass 我们没跑到的类，漏一个「AWT-XAWT」
+#     线程直接死掉（实测：复制文本后别的程序来取剪贴板 → XRootWindow 找不到，事件循环停摆）。
+#     所以 java.desktop 的 sun.awt / sun.datatransfer / java.awt.datatransfer 整包登记进 jni。
+#     这三条静态规则连同采集结果一起放在 build/aot/derived 里，agent 的原始输出不改写。
+#  7. Swing 与剪贴板还有两处「不报错就等着崩」：UIManager 按名字反射装 *UI（没采集到的控件会抛
+#     no ComponentUI class，出错对话框就是这么把进程带走的），以及 AWT 用 java.io 序列化搬运
+#     selection 内容（漏登记时复制「成功」但别的应用什么也取不到）。规则见 3/4 步那段 python。
 #
 # MPTODO: 添加 deb/appimage/flatpak 目标
 set -euo pipefail
@@ -34,6 +41,9 @@ GRADLE_ARGS=(--configure-on-demand)
 MIRROR_INIT="${MIRROR_INIT:-/tmp/central-mirror.gradle}"
 [[ -f "$MIRROR_INIT" ]] && GRADLE_ARGS+=(-I "$MIRROR_INIT")
 META="$WORK/reachability-metadata.json"
+# 派生配置单独放一个目录，和 agent 采集的原始配置一起交给 native-image（两份都会被读）
+GEN_DIR="$WORK/derived"
+GEN="$GEN_DIR/reachability-metadata.json"
 APP_MAIN=me.rerere.rikkahub.linux.MainKt
 JVM_ARGS=(-Dskiko.renderApi=SOFTWARE -Djava.awt.headless=false)
 
@@ -96,31 +106,44 @@ else
     log "2/4 Reuse current metadata（--refresh to bypass）"
 fi
 
-log "3/4 Complete jni and compile"
-python3 - "$META" "$CP" <<'PY'
-import json, sys, zipfile, pathlib
-meta_path, cp = pathlib.Path(sys.argv[1]), sys.argv[2]
-m = json.loads(meta_path.read_text())
+log "3/4 Generate derived config and compile"
+rm -rf "$GEN_DIR"; mkdir -p "$GEN_DIR"
+python3 - "$META" "$GEN" "$CP" "$GRAAL" <<'PY'
+import json, subprocess, sys, zipfile, pathlib
+agent_path, gen_path, cp, graal = sys.argv[1], pathlib.Path(sys.argv[2]), sys.argv[3], sys.argv[4]
+agent = json.loads(pathlib.Path(agent_path).read_text())   # agent 的原始采集，只读不改
+gen = {'reflection': [], 'jni': [], 'serialization': [], 'resources': []}
+FLAGS = {'allDeclaredConstructors': True, 'allPublicConstructors': True, 'allDeclaredMethods': True,
+         'allPublicMethods': True, 'allDeclaredFields': True, 'allPublicFields': True,
+         'allDeclaredClasses': True}
+ref, jni, ser, res = gen['reflection'], gen['jni'], gen['serialization'], gen['resources']
+ref_by, jni_by = {}, {}
 
-# 静态可枚举的两类不靠采集，直接按全量登记：
-#  - @Serializable：kotlinx 运行期有两条路拿序列化器——读 X.Companion 再调 serializer()，
-#    或按 Class.forName("X$$serializer") 取 INSTANCE。所以 X、X$Companion、X$$serializer
-#    三个都要在 reflection 段登记成员。判据取 jar 里存在 Xxx$$serializer.class（插件生成的）。
-#    注意是「合并升级」：agent 已经记过的类可能只记了一部分成员（ErrorResponse 就是被记成空条目，
-#    结果接口一报错反而 500：StatusPages 拿不到它的序列化器），跳过已有条目等于没修。
-#    只写 serialization 段没用，那一段是给 java.io 序列化用的。
-#  - 资源：我们自己按路径读 classpath 的三棵树（前端产物、R 资源、android assets）。
-SERIALIZABLE_SUFFIX = '$$serializer.class'
-FLAGS = ('allDeclaredConstructors', 'allPublicConstructors', 'allDeclaredMethods',
-         'allPublicMethods', 'allDeclaredFields', 'allPublicFields')
-serial, resources = m.setdefault('serialization', []), m.setdefault('resources', [])
-agent_ref = list(m.get('reflection', []))          # jni 段只跟 agent 记的那些走
-reflections = m.setdefault('reflection', [])
-by_name = {}
-for e in reflections:
-    by_name.setdefault(e.get('type'), e)
-have_ser = {e.get('type') for e in serial}
-added = 0
+def want_reflect(cls):
+    if cls not in ref_by:
+        e = {'type': cls, **FLAGS}; ref.append(e); ref_by[cls] = e
+
+def want_jni(cls):
+    if cls not in jni_by:
+        e = {'type': cls, **FLAGS}; jni.append(e); jni_by[cls] = e
+
+# 三条「静态可枚举」的规则，不靠采集跑到；agent 那份保持原样，派生配置单独成文件，
+# 这样每次构建都是重新推导，不会像就地改写那样把上一轮的合成条目再喂给下一轮。
+#
+# 1) @Serializable：kotlinx 拿序列化器有两条路——读 X.Companion 字段再调 serializer()，
+#    或 Class.forName("X$$serializer") 取 INSTANCE，两条都是反射，所以 X / X$Companion /
+#    X$$serializer 三个都要登记成员。漏掉的表现是「接口本该回 400 却变成 500」：
+#    StatusPages 回 ErrorResponse 时拿不到它的序列化器。判据 = jar 里存在 Xxx$$serializer.class。
+#    （只写 serialization 段没用，那一段是给 java.io 序列化用的。）
+SERIALIZABLE = '$$serializer.class'
+CLIPBOARD_SERIALIZABLE = (
+    'java.lang.String', 'java.lang.Integer', 'java.lang.Long', 'java.lang.Boolean',
+    'java.net.URI', 'java.net.URL', 'java.io.File',
+    'java.awt.datatransfer.DataFlavor', 'java.awt.datatransfer.MimeType',
+    'java.util.ArrayList', 'java.util.LinkedList', 'java.util.Vector',
+    'java.util.Arrays$ArrayList', 'java.util.Collections$UnmodifiableList',
+    'java.util.Collections$UnmodifiableRandomAccessList', 'java.util.Collections$EmptyList',
+)
 for jar in cp.split(':'):
     if not jar.endswith('.jar'):
         continue
@@ -129,42 +152,68 @@ for jar in cp.split(':'):
     except (OSError, zipfile.BadZipFile):
         continue
     for n in names:
-        if not n.endswith(SERIALIZABLE_SUFFIX):
+        if not n.endswith(SERIALIZABLE):
             continue
-        t = n[: -len(SERIALIZABLE_SUFFIX)].split('$')[0].replace('/', '.')
-        if t not in have_ser:
-            serial.append({'type': t}); have_ser.add(t)
+        t = n[: -len(SERIALIZABLE)].split('$')[0].replace('/', '.')
+        ser.append({'type': t})
         for cls in (t, t + '$Companion', t + '$$serializer'):
-            e = by_name.get(cls)
-            if e is None:
-                e = {'type': cls}
-                reflections.append(e)
-                by_name[cls] = e
-                added += 1
-            for f in FLAGS:
-                e[f] = True
-seen_res = {e.get('glob') for e in resources}
-for g in ('static/**', 'rikka-res/**', 'assets/**'):
-    if g not in seen_res:
-        resources.append({'glob': g}); seen_res.add(g)
+            want_reflect(cls)
 
-# AWT 的 XToolkit 线程要 FindClass，只写 reflection 段会「能看不能点」，所以同步进 jni 段
-jni = m.setdefault('jni', [])
-have = {e.get('type') for e in jni}
-for e in agent_ref:
+# 2) 我们自己按路径读 classpath 的三棵树：前端产物、R 资源、android assets；
+#    再加 Swing/AWT 自己的资源（LookAndFeel 的语言包与图标，按组件名反射加载）。
+for g in ('static/**', 'rikka-res/**', 'assets/**',
+          'com/sun/swing/internal/plaf/**', 'com/sun/java/swing/plaf/**',
+          'javax/swing/plaf/**', 'sun/awt/resources/**'):
+    res.append({'glob': g})
+
+# 3) X11 剪贴板：AWT 是把 Transferable 的数据用 java.io 序列化后放进 selection 传给别的程序的
+#    （sun.awt.datatransfer.TransferableProxy.getTransferData → ObjectOutputStream），
+#    而这条路 agent 不会记（实测：采集里剪贴板 round-trip=true，serialization 段仍是 0），
+#    GraalVM 25 也没有「全部登记」开关。漏了的表现很阴：复制不报错，但别的应用来取什么也没有。
+#    文本会牵动的类型按判据列全（应用侧只有文本剪贴板，没有 ImageSelection）。
+for t in CLIPBOARD_SERIALIZABLE:
+    ser.append({'type': t})
+
+# 4) AWT：libawt_xawt.so 在任意一次 X11 事件里都可能 FindClass 我们没跑到的类，漏一个
+#    「AWT-XAWT」线程就直接死掉（实测复制文本后别的程序取剪贴板：
+#    NoClassDefFoundError: sun/awt/X11/XRootWindow，事件循环停摆）。这类没有单点判据，
+#    整包登记 java.desktop 的 AWT/数据搬运命名空间。
+listing = subprocess.run([graal + '/bin/jimage', 'list', graal + '/lib/modules'],
+                         capture_output=True, text=True, check=True).stdout
+for line in listing.splitlines():
+    n = line.strip()
+    if n.endswith('.class') and n.startswith(('sun/awt/', 'sun/datatransfer/', 'java/awt/datatransfer/')):
+        want_jni(n[:-6].replace('/', '.'))
+
+# 5) Swing 的 LookAndFeel：UIManager 按组件类型名反射实例化对应的 *UI，agent 只记采集时构造过的
+#    那一种控件（实测 JFileChooser 被采集记上了，出错对话框用的 JOptionPane 没有，于是
+#    「no ComponentUI class for …JOptionPane」直接带走进程）。判据可静态枚举：
+#    java.desktop 里各 LAF 包的 *UI / *LookAndFeel 全登记。
+for line in listing.splitlines():
+    n = line.strip()
+    if ('$' not in n and n.startswith(('javax/swing/plaf/metal/', 'javax/swing/plaf/basic/',
+                                       'com/sun/java/swing/plaf/gtk/', 'com/sun/java/swing/plaf/motif/',
+                                       'com/sun/java/swing/plaf/nimbus/'))
+            and (n.endswith('UI.class') or n.endswith('LookAndFeel.class'))):
+        cls = n[:-6].replace('/', '.')
+        want_reflect(cls); want_jni(cls)
+
+# 6) 剪贴板搬运「java 序列化对象」这一路，AWT 会用 java.rmi.MarshalledObject 包一层；
+#    没登记时是 NoSuchMethodException: java.rmi.MarshalledObject.<init>(java.lang.Object)。
+want_reflect('java.rmi.MarshalledObject')
+# 采集记过的类同时喂给 reflection 和 jni：只写 reflection 的话 XToolkit 线程
+# FindClass("java/lang/Thread") 会抛 NoClassDefFoundError，表现为「能看不能点」。
+for e in list(agent.get('reflection', [])) + list(agent.get('jni', [])):
     t = e.get('type')
-    if t and t not in have:
-        jni.append({'type': t, 'allDeclaredConstructors': True, 'allPublicConstructors': True,
-                    'allDeclaredMethods': True, 'allPublicMethods': True,
-                    'allDeclaredFields': True, 'allPublicFields': True, 'allDeclaredClasses': True})
-        have.add(t)
-meta_path.write_text(json.dumps(m, indent=1))
-print(f'      reflection {len(reflections)} (+{added} new) / jni {len(jni)} / serialization {len(serial)} / resources {len(resources)}')
+    if t:
+        want_reflect(t); want_jni(t)
+gen_path.write_text(json.dumps(gen, indent=1))
+print(f'      derived: reflection {len(ref)} / jni {len(jni)} / serialization {len(ser)} / resources {len(res)}')
 PY
 
 rm -rf "$WORK/image" && mkdir -p "$WORK/image"
 (cd "$REPO/linux" && "$GRAAL/bin/native-image" -J-Xmx9g \
-    -H:ConfigurationFileDirectories="$WORK" \
+    -H:ConfigurationFileDirectories="$WORK,$GEN_DIR" \
     -H:+IncludeAllLocales \
     --no-fallback -march=compatibility -Djava.awt.headless=false \
     -H:Path="$WORK/image" -cp "$CP" "$APP_MAIN" -o rikka-native) | tail -3

@@ -2,6 +2,9 @@ package me.rerere.rikkahub.linux.desktop
 
 import android.util.Log
 import androidx.activity.result.contract.buildFileChooser
+import java.awt.Toolkit
+import java.awt.datatransfer.DataFlavor
+import java.awt.datatransfer.StringSelection
 import java.net.URL
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -29,7 +32,22 @@ object AotWarmup {
 
     suspend fun exercise() {
         runCatching { exerciseFileChooser() }.onFailure { Log.e(TAG, "文件选择框预热失败", it) }
+        runCatching { exerciseClipboard() }.onFailure { Log.e(TAG, "剪贴板预热失败", it) }
         runCatching { exerciseWebServer() }.onFailure { Log.e(TAG, "Web 服务预热失败", it) }
+    }
+
+    /**
+     * X11 上剪贴板是把 Transferable 的数据用 java.io 序列化后塞进 selection 里传给别人的，
+     * 所以「写进剪贴板」这一步本身就会牵动一批只有走一遍才会被 agent 记下来的类
+     * （不记的话原生包里复制看似成功、别的应用来取就什么也拿不到）。
+     * 采集跑在独占的 Xvfb 上，覆盖的是那台机器的剪贴板，不影响用户会话。
+     */
+    private suspend fun exerciseClipboard() = withContext(Dispatchers.Swing) {
+        val clipboard = Toolkit.getDefaultToolkit().systemClipboard
+        val marker = "rikka-aot-warmup"
+        clipboard.setContents(StringSelection(marker), null)
+        val back = runCatching { clipboard.getData(DataFlavor.stringFlavor) }.getOrNull()
+        Log.i(TAG, "clipboard round-trip = ${back == marker}")
     }
 
     private suspend fun exerciseFileChooser() = withContext(Dispatchers.Swing) {
