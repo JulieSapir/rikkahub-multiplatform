@@ -19,7 +19,7 @@
 条件: 装了graalvm25
 
 1. 运行`./linux/aot/build.sh`
-2. 在`./linux/build/output`里找到产物
+2. 在`./build/output/rikka-native`里找到产物
 
 不建议用upx压缩，因为内存占用会多50M
 
