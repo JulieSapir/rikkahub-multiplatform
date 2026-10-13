@@ -102,13 +102,25 @@ import json, sys, zipfile, pathlib
 meta_path, cp = pathlib.Path(sys.argv[1]), sys.argv[2]
 m = json.loads(meta_path.read_text())
 
-# agent 只记录采集时真正碰到的东西，所以「静态可枚举」的两类不靠采集，直接按全量登记：
-#  - @Serializable：判据是 classpath 里存在 Xxx$$serializer（编译器插件生成的），
-#    Ktor 的 content-negotiation 运行期按类型反射找它，缺一个就是一条 500；
+# 静态可枚举的两类不靠采集，直接按全量登记：
+#  - @Serializable：kotlinx 运行期有两条路拿序列化器——读 X.Companion 再调 serializer()，
+#    或按 Class.forName("X$$serializer") 取 INSTANCE。所以 X、X$Companion、X$$serializer
+#    三个都要在 reflection 段登记成员。判据取 jar 里存在 Xxx$$serializer.class（插件生成的）。
+#    注意是「合并升级」：agent 已经记过的类可能只记了一部分成员（ErrorResponse 就是被记成空条目，
+#    结果接口一报错反而 500：StatusPages 拿不到它的序列化器），跳过已有条目等于没修。
+#    只写 serialization 段没用，那一段是给 java.io 序列化用的。
 #  - 资源：我们自己按路径读 classpath 的三棵树（前端产物、R 资源、android assets）。
 SERIALIZABLE_SUFFIX = '$$serializer.class'
+FLAGS = ('allDeclaredConstructors', 'allPublicConstructors', 'allDeclaredMethods',
+         'allPublicMethods', 'allDeclaredFields', 'allPublicFields')
 serial, resources = m.setdefault('serialization', []), m.setdefault('resources', [])
+agent_ref = list(m.get('reflection', []))          # jni 段只跟 agent 记的那些走
+reflections = m.setdefault('reflection', [])
+by_name = {}
+for e in reflections:
+    by_name.setdefault(e.get('type'), e)
 have_ser = {e.get('type') for e in serial}
+added = 0
 for jar in cp.split(':'):
     if not jar.endswith('.jar'):
         continue
@@ -117,19 +129,29 @@ for jar in cp.split(':'):
     except (OSError, zipfile.BadZipFile):
         continue
     for n in names:
-        if n.endswith(SERIALIZABLE_SUFFIX):
-            t = n[: -len(SERIALIZABLE_SUFFIX)].split('$')[0].replace('/', '.')
-            if t not in have_ser:
-                serial.append({'type': t}); have_ser.add(t)
+        if not n.endswith(SERIALIZABLE_SUFFIX):
+            continue
+        t = n[: -len(SERIALIZABLE_SUFFIX)].split('$')[0].replace('/', '.')
+        if t not in have_ser:
+            serial.append({'type': t}); have_ser.add(t)
+        for cls in (t, t + '$Companion', t + '$$serializer'):
+            e = by_name.get(cls)
+            if e is None:
+                e = {'type': cls}
+                reflections.append(e)
+                by_name[cls] = e
+                added += 1
+            for f in FLAGS:
+                e[f] = True
 seen_res = {e.get('glob') for e in resources}
 for g in ('static/**', 'rikka-res/**', 'assets/**'):
     if g not in seen_res:
         resources.append({'glob': g}); seen_res.add(g)
 
 # AWT 的 XToolkit 线程要 FindClass，只写 reflection 段会「能看不能点」，所以同步进 jni 段
-ref, jni = m.get('reflection', []), m.setdefault('jni', [])
+jni = m.setdefault('jni', [])
 have = {e.get('type') for e in jni}
-for e in ref:
+for e in agent_ref:
     t = e.get('type')
     if t and t not in have:
         jni.append({'type': t, 'allDeclaredConstructors': True, 'allPublicConstructors': True,
@@ -137,7 +159,7 @@ for e in ref:
                     'allDeclaredFields': True, 'allPublicFields': True, 'allDeclaredClasses': True})
         have.add(t)
 meta_path.write_text(json.dumps(m, indent=1))
-print(f'      reflection {len(ref)} / jni {len(jni)} / serialization {len(serial)} / resources {len(resources)}')
+print(f'      reflection {len(reflections)} (+{added} new) / jni {len(jni)} / serialization {len(serial)} / resources {len(resources)}')
 PY
 
 rm -rf "$WORK/image" && mkdir -p "$WORK/image"
