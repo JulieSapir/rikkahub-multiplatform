@@ -32,18 +32,4 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "rikkahub"
-include(":app")
-include(":ai")
-include(":search")
-include(":speech")
-include(":common")
-include(":document")
-include(":web")
-include(":material3")
-include(":ui")
-include(":workspace")
-include(":terminal")
-include(":app:baselineprofile")
-include(":mediagen")
-include(":oauth")
 include(":linux")
