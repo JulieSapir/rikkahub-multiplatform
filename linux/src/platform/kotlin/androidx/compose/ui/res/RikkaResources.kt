@@ -42,8 +42,11 @@ fun painterResource(id: Int, contentDescription: String?): Painter =
 @Composable
 private fun rasterResource(id: Int): Painter? {
     val path = RikkaRes.resourcePath(id) ?: return null
-    val bytes = RikkaRes.bytesOf(path) ?: return null
-    return runCatching { BitmapPainter(Image.makeFromEncoded(bytes).toComposeImageBitmap()) }.getOrNull()
+    // 读字节与解码都不便宜，重组时反复执行会卡顿，按 path 记住解码结果
+    return remember(path) {
+        val bytes = RikkaRes.bytesOf(path) ?: return@remember null
+        runCatching { BitmapPainter(Image.makeFromEncoded(bytes).toComposeImageBitmap()) }.getOrNull()
+    }
 }
 
 /** res/drawable 下的矢量图先翻成 ImageVector，Icon 的 tint 才会和 Android 端一致 */

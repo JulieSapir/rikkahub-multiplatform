@@ -56,7 +56,7 @@ object RikkaRes {
 
     private fun tableOf(tag: String): Map<String, String> = tables.getOrPut(tag) {
         val text = RikkaRes::class.java.getResourceAsStream("/rikka-res/strings/$tag.json")
-            ?.reader()?.readText() ?: return@getOrPut emptyMap()
+            ?.reader(Charsets.UTF_8)?.readText() ?: return@getOrPut emptyMap()
         runCatching {
             json.parseToJsonElement(text).jsonObject.mapValues { it.value.jsonPrimitive.contentOrNull ?: "" }
         }.getOrDefault(emptyMap())

@@ -27,6 +27,8 @@ class Resources(private val context: Context = Context()) {
 
     class Configuration {
         val locale: Locale get() = Locale.getDefault()
-        val locales: LocaleList = LocaleList(Locale.getDefault())
+
+        // 与 locale 保持同源：语言是活值，构造时冻结的快照会在改语言后互相矛盾
+        val locales: LocaleList get() = LocaleList(Locale.getDefault())
     }
 }

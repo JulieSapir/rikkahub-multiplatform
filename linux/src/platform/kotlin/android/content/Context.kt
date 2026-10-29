@@ -111,13 +111,13 @@ open class Context(
     companion object {
         const val CLIPBOARD_SERVICE = "clipboard"
         const val NOTIFICATION_SERVICE = "notification"
-        const val BATTERY_SERVICE = "batteryinfo"
+        const val BATTERY_SERVICE = "battery"
         const val WIFI_SERVICE = "wifi"
         const val DOWNLOAD_SERVICE = "download"
         const val VIBRATOR_SERVICE = "vibrator"
         const val POWER_SERVICE = "power"
         const val AUDIO_SERVICE = "audio"
-        const val INPUT_METHOD_SERVICE = "inputmethod"
+        const val INPUT_METHOD_SERVICE = "input_method"
         const val CONNECTIVITY_SERVICE = "connectivity"
         const val MODE_PRIVATE = 0
         const val PERMISSION_DENIED = -1
@@ -150,12 +150,33 @@ class ContentResolver {
         } else {
             android.os.Environment.DIRECTORY_PICTURES
         }
+        // RELATIVE_PATH 常与 bucket 同名（上游传 "Pictures"），去掉这份重叠才不会落成 ~/Pictures/Pictures
+        val trimmed = relative?.trim('/').orEmpty()
+        val underBucket = when {
+            trimmed == bucket -> ""
+            trimmed.startsWith("$bucket/") -> trimmed.removePrefix("$bucket/")
+            else -> trimmed
+        }
         val dir = File(
             android.os.Environment.getExternalStoragePublicDirectory(bucket),
-            relative?.trim('/').orEmpty(),
+            underBucket,
         )
         if (!dir.isDirectory && !dir.mkdirs()) return null
-        return Uri.fromFile(File(dir, name.substringBeforeLast('/')))
+        return Uri.fromFile(uniqueChild(dir, name.substringAfterLast('/')))
+    }
+
+    /** Android 的媒体库不允许同名覆盖，按 "name (n).ext" 递增避让。 */
+    private fun uniqueChild(dir: File, name: String): File {
+        val target = File(dir, name)
+        if (!target.exists()) return target
+        val stem = name.substringBeforeLast('.', name)
+        val ext = if (name == stem) "" else ".${name.substringAfterLast('.')}"
+        var index = 1
+        while (true) {
+            val candidate = File(dir, "$stem ($index)$ext")
+            if (!candidate.exists()) return candidate
+            index++
+        }
     }
 
     fun delete(

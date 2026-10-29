@@ -3,6 +3,7 @@ package me.rerere.ui.webview
 import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
 import java.io.File
+import me.rerere.common.android.appTempFolder
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -155,7 +156,10 @@ fun WebView(
 private fun base64(bytes: ByteArray): String = java.util.Base64.getEncoder().encodeToString(bytes)
 
 private fun openInBrowser(context: android.content.Context, html: String) {
-    val file = File(context.cacheDir, "webview_preview_${html.hashCode()}.html").apply { writeText(html) }
+    // 落到 appTempFolder（启动时清空）：cacheDir 只写不清，hashCode 也会撞名覆盖
+    val file = File(context.appTempFolder, "webview_preview_${System.nanoTime()}.html").apply {
+        writeText(html, Charsets.UTF_8)
+    }
     val opened = runCatching { java.awt.Desktop.getDesktop().browse(file.toURI()) }.isSuccess
     if (!opened) {
         context.startActivity(

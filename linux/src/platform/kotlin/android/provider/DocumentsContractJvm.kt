@@ -36,7 +36,7 @@ object DocumentsContract {
         const val FLAG_SUPPORTS_CREATE = 2
     }
 
-    fun isDocumentUri(context: android.content.Context, uri: Uri?): Boolean = uri != null
+    fun isDocumentUri(context: android.content.Context, uri: Uri?): Boolean = uri != null && uri.scheme == "file"
 
     /** 桌面端 tree uri 就是目录本身，documentId 是它的绝对路径。 */
     fun getTreeDocumentId(treeUri: Uri): String = pathOf(treeUri)
@@ -55,7 +55,9 @@ object DocumentsContract {
         mimeType: String?,
         displayName: String,
     ): Uri? = runCatching {
-        val target = File(pathOf(treeUri), displayName)
+        // SAF 契约是必然生成唯一名：目标已存在时换 "name (1).ext" 再建，不能静默覆盖旧文件
+        val dir = File(pathOf(treeUri))
+        val target = uniqueFile(File(dir, displayName))
         if (mimeType == Document.MIME_TYPE_DIR) {
             if (!target.mkdirs() && !target.isDirectory) return null
         } else {
@@ -64,6 +66,20 @@ object DocumentsContract {
         }
         Uri.fromFile(target)
     }.getOrNull()
+
+    /** 与 Android 的 DocumentsProvider 一致：已存在时生成 "name (n).ext"，n 从 1 递增。 */
+    private fun uniqueFile(target: File): File {
+        if (!target.exists()) return target
+        val name = target.name
+        val base = name.substringBeforeLast('.', name)
+        val ext = if (name == base) "" else ".${name.substringAfterLast('.')}"
+        var index = 1
+        while (true) {
+            val candidate = File(target.parentFile, "$base ($index)$ext")
+            if (!candidate.exists()) return candidate
+            index++
+        }
+    }
 
     fun deleteDocument(resolver: ContentResolver, uri: Uri): Boolean =
         File(pathOf(uri)).let { if (it.isDirectory) it.deleteRecursively() else it.delete() }

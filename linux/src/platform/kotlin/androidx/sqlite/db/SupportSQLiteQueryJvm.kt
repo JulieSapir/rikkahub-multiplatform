@@ -23,6 +23,8 @@ class SimpleSQLiteQuery(
                 null -> program.bindNull(index + 1)
                 is Long -> program.bindLong(index + 1, value)
                 is Int -> program.bindLong(index + 1, value.toLong())
+                is Boolean -> program.bindLong(index + 1, if (value) 1L else 0L)
+                is Float -> program.bindDouble(index + 1, value.toDouble())
                 is Double -> program.bindDouble(index + 1, value)
                 is ByteArray -> program.bindBlob(index + 1, value)
                 else -> program.bindText(index + 1, value.toString())

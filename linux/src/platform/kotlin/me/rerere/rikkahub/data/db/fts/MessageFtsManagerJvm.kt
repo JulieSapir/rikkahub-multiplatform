@@ -51,26 +51,34 @@ class MessageFtsManager(private val database: AppDatabase) {
 
     suspend fun indexConversation(conversation: Conversation) = withConnection { db ->
         val conversationId = conversation.id.toString()
-        db.exec("DELETE FROM message_fts WHERE conversation_id = ?") { bindText(1, conversationId) }
-        conversation.messageNodes.forEach { node ->
-            node.messages.forEach { message ->
-                val text = message.extractFtsText()
-                if (text.isNotBlank()) {
-                    db.exec(
-                        """
-                        INSERT INTO message_fts(text, node_id, message_id, conversation_id, title, update_at)
-                        VALUES (?, ?, ?, ?, ?, ?)
-                        """.trimIndent(),
-                    ) {
-                        bindText(1, text)
-                        bindText(2, node.id.toString())
-                        bindText(3, message.id.toString())
-                        bindText(4, conversationId)
-                        bindText(5, conversation.title)
-                        bindText(6, conversation.updateAt.toEpochMilli().toString())
+        // 先删后插必须是一个事务，中断在中间会让这条会话在全文索引里只剩一半
+        db.exec("BEGIN IMMEDIATE")
+        try {
+            db.exec("DELETE FROM message_fts WHERE conversation_id = ?") { bindText(1, conversationId) }
+            conversation.messageNodes.forEach { node ->
+                node.messages.forEach { message ->
+                    val text = message.extractFtsText()
+                    if (text.isNotBlank()) {
+                        db.exec(
+                            """
+                            INSERT INTO message_fts(text, node_id, message_id, conversation_id, title, update_at)
+                            VALUES (?, ?, ?, ?, ?, ?)
+                            """.trimIndent(),
+                        ) {
+                            bindText(1, text)
+                            bindText(2, node.id.toString())
+                            bindText(3, message.id.toString())
+                            bindText(4, conversationId)
+                            bindText(5, conversation.title)
+                            bindText(6, conversation.updateAt.toEpochMilli().toString())
+                        }
                     }
                 }
             }
+            db.exec("COMMIT")
+        } catch (t: Throwable) {
+            runCatching { db.exec("ROLLBACK") }
+            throw t
         }
     }
 

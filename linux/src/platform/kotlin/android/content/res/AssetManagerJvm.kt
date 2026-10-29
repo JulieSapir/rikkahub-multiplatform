@@ -21,15 +21,20 @@ class AssetManager(private val root: File) {
 
     fun list(path: String): Array<String>? {
         val normalized = path.trimEnd('/')
+        // assets 根在 Context 构造时被 mkdirs，本地目录永远“存在”，只看磁盘会漏掉 jar 内的条目，
+        // 所以本地目录与索引取并集去重
         val local = if (normalized.isEmpty()) root else File(root, normalized)
-        if (local.isDirectory) {
-            return local.list()?.filterNot { it.startsWith(".") }?.toTypedArray()
+        val fromDisk = if (local.isDirectory) {
+            local.list()?.filterNot { it.startsWith(".") }.orEmpty()
+        } else {
+            emptyList()
         }
         val prefix = if (normalized.isEmpty()) "" else "$normalized/"
-        val children = index.mapNotNull { entry ->
-            if (!entry.startsWith("$prefix")) return@mapNotNull null
+        val fromIndex = index.mapNotNull { entry ->
+            if (!entry.startsWith(prefix)) return@mapNotNull null
             entry.removePrefix(prefix).substringBefore('/')
-        }.distinct()
+        }
+        val children = (fromDisk + fromIndex).distinct()
         return children.takeIf { it.isNotEmpty() }?.toTypedArray()
     }
 

@@ -15,6 +15,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import me.rerere.common.android.appTempFolder
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.ui.webview.WebViewContentCache
 import java.awt.Desktop
@@ -65,8 +66,9 @@ fun WebViewPage(url: String, contentId: String) {
 }
 
 private fun writeHtmlFile(context: Context, html: String): File? = runCatching {
-    val target = File(context.cacheDir, "preview_${System.nanoTime()}.html")
-    target.writeText(html)
+    // 预览页是一次性的，落进 appTempFolder（启动时清空），不能在 cacheDir 只写不清
+    val target = File(context.appTempFolder, "preview_${System.nanoTime()}.html")
+    target.writeText(html, Charsets.UTF_8)
     target
 }.getOrNull()
 

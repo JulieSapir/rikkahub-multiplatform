@@ -94,7 +94,8 @@ class TerminalSession(
     }
 
     fun writeText(text: String) {
-        val bytes = text.toByteArray()
+        // 终端 env 固定 C.UTF-8，这里不能依赖平台默认字符集
+        val bytes = text.toByteArray(Charsets.UTF_8)
         write(bytes, 0, bytes.size)
     }
 

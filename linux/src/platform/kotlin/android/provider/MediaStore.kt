@@ -8,15 +8,15 @@ import android.net.Uri
  */
 object MediaStore {
     object Images {
-        const val Media_DisplayName = "display_name"
+        const val Media_DisplayName = "_display_name"
 
         object Media {
             val EXTERNAL_CONTENT_URI: Uri = Uri.parse("file:///Pictures")
             const val TITLE = "title"
-            const val DISPLAY_NAME = "display_name"
+            const val DISPLAY_NAME = "_display_name"
             const val MIME_TYPE = "mime_type"
             const val DATA = "_data"
-            const val SIZE = "size"
+            const val SIZE = "_size"
             const val DATE_ADDED = "date_added"
         }
     }
@@ -24,17 +24,17 @@ object MediaStore {
     object Video {
         object Media {
             val EXTERNAL_CONTENT_URI: Uri = Uri.parse("file:///Movies")
-            const val DISPLAY_NAME = "display_name"
+            const val DISPLAY_NAME = "_display_name"
         }
     }
 
     object MediaColumns {
-        const val DISPLAY_NAME = "display_name"
+        const val DISPLAY_NAME = "_display_name"
         const val MIME_TYPE = "mime_type"
         const val RELATIVE_PATH = "relative_path"
         const val TITLE = "title"
         const val DATE_ADDED = "date_added"
-        const val SIZE = "size"
+        const val SIZE = "_size"
         const val _ID = "_id"
     }
 

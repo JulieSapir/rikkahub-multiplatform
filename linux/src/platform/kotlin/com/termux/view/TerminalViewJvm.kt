@@ -164,10 +164,10 @@ private fun encodeTerminalKey(event: ComposeKeyEvent): ByteArray? {
         Key.Escape -> return "\u001b".toByteArray()
         Key.Backspace -> return "\u007f".toByteArray()
         Key.Tab -> return "\t".toByteArray()
-        Key.DirectionUp -> return if (ctrl) "\u001b[A".toByteArray() else ESC_UP
-        Key.DirectionDown -> return ESC_DOWN
-        Key.DirectionRight -> return ESC_RIGHT
-        Key.DirectionLeft -> return ESC_LEFT
+        Key.DirectionUp -> return if (ctrl) ESC_CTRL_UP else ESC_UP
+        Key.DirectionDown -> return if (ctrl) ESC_CTRL_DOWN else ESC_DOWN
+        Key.DirectionRight -> return if (ctrl) ESC_CTRL_RIGHT else ESC_RIGHT
+        Key.DirectionLeft -> return if (ctrl) ESC_CTRL_LEFT else ESC_LEFT
         Key.MoveHome -> return ESC_HOME
         Key.MoveEnd -> return ESC_END
         Key.Delete -> return ESC_DELETE
@@ -182,7 +182,7 @@ private fun encodeTerminalKey(event: ComposeKeyEvent): ByteArray? {
         return byteArrayOf((codePoint - 'a'.code + 1).toByte())
     }
     if (codePoint < 32) return byteArrayOf(codePoint.toByte())
-    return Character.toString(codePoint).toByteArray()
+    return Character.toString(codePoint).toByteArray(Charsets.UTF_8)
 }
 
 private val ESC_UP = "\u001b[A".toByteArray()
@@ -192,3 +192,8 @@ private val ESC_LEFT = "\u001b[D".toByteArray()
 private val ESC_HOME = "\u001b[H".toByteArray()
 private val ESC_END = "\u001b[F".toByteArray()
 private val ESC_DELETE = "\u001b[3~".toByteArray()
+// Ctrl+方向键是 xterm 的修饰符序列（1;5 = Ctrl），shell 里按词跳转靠它
+private val ESC_CTRL_UP = "\u001b[1;5A".toByteArray()
+private val ESC_CTRL_DOWN = "\u001b[1;5B".toByteArray()
+private val ESC_CTRL_RIGHT = "\u001b[1;5C".toByteArray()
+private val ESC_CTRL_LEFT = "\u001b[1;5D".toByteArray()

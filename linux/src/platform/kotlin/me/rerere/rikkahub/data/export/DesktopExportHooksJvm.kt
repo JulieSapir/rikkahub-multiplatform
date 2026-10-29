@@ -34,7 +34,7 @@ class ExporterState<T>(
     fun exportToFile(fileName: String = this.fileName) {
         scope.launch(Dispatchers.IO) {
             pickFile(fileName, save = true)?.let { target ->
-                target.writeText(value)
+                target.writeText(value, Charsets.UTF_8)
             }
         }
     }
@@ -109,7 +109,13 @@ private fun pickFile(suggestedName: String, save: Boolean): File? {
         if (save) FileDialog.SAVE else FileDialog.LOAD,
     ).apply {
         if (save) file = suggestedName
-        isVisible = true
+    }
+    // AWT 组件只能在 EDT 上显示；模态对话框在 EDT 里自旋到关闭，invokeAndWait 随之返回，
+    // 调用线程（IO）保持阻塞等待的语义
+    try {
+        javax.swing.SwingUtilities.invokeAndWait { dialog.isVisible = true }
+    } catch (e: java.lang.reflect.InvocationTargetException) {
+        throw e.cause ?: e
     }
     val name = dialog.file ?: return null
     return File(dialog.directory ?: System.getProperty("user.home"), name)

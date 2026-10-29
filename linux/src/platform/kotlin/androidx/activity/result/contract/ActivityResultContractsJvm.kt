@@ -126,10 +126,25 @@ object ActivityResultContracts {
         override fun execute(context: Context, input: Uri, callback: (Boolean) -> Unit) = callback(false)
     }
 
-    /** 桌面端没有“另一个 Activity 返回结果”，直接给取消，调用方走失败分支。 */
+    /**
+     * 桌面端没有“另一个 Activity 返回结果”，一般直接给取消，调用方走失败分支。
+     * UCrop 的“裁剪 Activity”在桌面端由 UCropJvm.getIntent 同步写盘完成，这里按它塞进
+     * extra 的错误标记把结果翻译回 RESULT_OK / RESULT_ERROR，getResultUri/getError 才能工作。
+     */
     class StartActivityForResult : ActivityResultContract<Intent, ActivityResult> {
-        override fun execute(context: Context, input: Intent, callback: (ActivityResult) -> Unit) =
-            callback(ActivityResult(ActivityResult.RESULT_CANCELED))
+        override fun execute(context: Context, input: Intent, callback: (ActivityResult) -> Unit) {
+            val result = if (input.action == com.yalantis.ucrop.UCrop.ACTION_CROP) {
+                val code = if (input.getStringExtra(com.yalantis.ucrop.UCrop.EXTRA_ERROR) != null) {
+                    com.yalantis.ucrop.UCrop.RESULT_ERROR
+                } else {
+                    ActivityResult.RESULT_OK
+                }
+                ActivityResult(code, input)
+            } else {
+                ActivityResult(ActivityResult.RESULT_CANCELED)
+            }
+            callback(result)
+        }
     }
 
     private fun mimeExtensions(mimeTypes: Array<String>): Set<String>? {
@@ -151,7 +166,10 @@ private fun extensionsFor(mimeType: String): Set<String>? = when (mimeType) {
     "application/json" -> setOf("json")
     "text/plain" -> setOf("txt", "md")
     "application/zip" -> setOf("zip")
-    else -> mimeType.substringAfter('/').takeIf { it.isNotBlank() && it != "*" }?.let { setOf(it) }
+    // audio/mpeg 的扩展名是 mp3 不是 mpeg，其余 subtype+后缀形态（image/svg+xml）先去掉 +xxx
+    "audio/mpeg" -> setOf("mp3")
+    else -> mimeType.substringAfter('/').substringBefore('+')
+        .takeIf { it.isNotBlank() && it != "*" }?.let { setOf(it) }
 }
 
 private val IMAGE_EXT = setOf("png", "jpg", "jpeg", "webp", "gif", "bmp")

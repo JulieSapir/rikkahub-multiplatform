@@ -38,11 +38,16 @@ private class DesktopLifecycle : Lifecycle() {
         get() = if (foreground) State.RESUMED else State.CREATED
 
     override fun addObserver(observer: LifecycleObserver) {
-        val event = synchronized(observers) {
+        // 与 LifecycleRegistry 一致：新观察者要补发到当前状态（RESUMED = CREATE→START→RESUME）
+        val events = synchronized(observers) {
             observers += observer
-            if (foreground) Event.ON_START else null
+            if (foreground) {
+                listOf(Event.ON_CREATE, Event.ON_START, Event.ON_RESUME)
+            } else {
+                listOf(Event.ON_CREATE)
+            }
         }
-        event?.let { dispatch(observer, it) }
+        events.forEach { dispatch(observer, it) }
     }
 
     override fun removeObserver(observer: LifecycleObserver) {

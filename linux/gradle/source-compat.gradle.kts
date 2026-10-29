@@ -61,7 +61,7 @@ abstract class RewriteCompatSourcesTask : DefaultTask() {
                 it.name == fileName && it.absolutePath.replace('\\', '/').contains(packagePath)
             } ?: throw IllegalStateException("compat 规则没找到源文件: $packagePath/$fileName")
 
-            var text = source.readText()
+            var text = source.readText(Charsets.UTF_8)
             replacements.forEach { (find, replace) ->
                 if (!text.contains(find)) {
                     throw IllegalStateException("compat 规则失配: $fileName 里找不到 \"$find\"，上游改了这个文件")
@@ -70,6 +70,7 @@ abstract class RewriteCompatSourcesTask : DefaultTask() {
             }
             val target = File(File(out, packagePath), fileName.removeSuffix(".kt") + "Compat.kt")
             target.parentFile.mkdirs()
+            // 上游源码都是 UTF-8，写出时显式指定，JDK17 的 C locale 默认字符集不是它
             target.writeText(
                 buildString {
                     appendLine("// 由 linux/gradle/source-compat.gradle.kts 从 ${relativeNameOf(source)} 生成，请勿手改")
@@ -77,6 +78,7 @@ abstract class RewriteCompatSourcesTask : DefaultTask() {
                     appendLine()
                     append(text)
                 },
+                Charsets.UTF_8,
             )
             logger.lifecycle("source-compat: $fileName -> ${target.name}")
         }

@@ -125,13 +125,13 @@ abstract class GenerateRikkaResTask : DefaultTask() {
             from.copyTo(target, overwrite = true)
         }
         // AssetManager.list 需要目录列表，jar 里没有列目录的 API，所以额外写一份索引
-        File(resOut, "assets-index.txt").writeText(assetIndex.sorted().joinToString("\n"))
+        File(resOut, "assets-index.txt").writeText(assetIndex.sorted().joinToString("\n"), Charsets.UTF_8)
 
         tables.forEach { (tag, table) -> writeJson(File(resOut, "strings/$tag.json"), table) }
         moduleTables.forEach { table ->
-            File(kotlinOut, "R-${table.prefix}.kt").writeText(renderR(table, groupBases))
+            File(kotlinOut, "R-${table.prefix}.kt").writeText(renderR(table, groupBases), Charsets.UTF_8)
         }
-        File(kotlinOut, "RikkaResLookup.kt").writeText(renderLookup(stringKeys, binaryFiles))
+        File(kotlinOut, "RikkaResLookup.kt").writeText(renderLookup(stringKeys, binaryFiles), Charsets.UTF_8)
         logger.lifecycle("rikka-res: ${stringKeys.size} 条字符串, ${tables.size} 种语言")
     }
 
@@ -306,7 +306,7 @@ abstract class GenerateRikkaResTask : DefaultTask() {
                 append(jsonString(k)).append(':').append(jsonString(v))
             }
             append('}')
-        })
+        }, Charsets.UTF_8)
     }
 
     private fun jsonString(value: String): String = buildString {

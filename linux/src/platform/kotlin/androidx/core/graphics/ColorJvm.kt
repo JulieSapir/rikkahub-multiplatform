@@ -8,7 +8,9 @@ package androidx.core.graphics
 fun String.toColorInt(): Long {
     val hex = removePrefix("#")
     val full = when (hex.length) {
-        3 -> hex.map { "$it$it" }.joinToString("")
+        // #RGB 补满不透明 alpha，#ARGB 每位展开成两位，对齐 VectorDrawableParser 的解析
+        3 -> "ff${hex.map { "$it$it" }.joinToString("")}"
+        4 -> hex.map { "$it$it" }.joinToString("")
         6 -> "ff$hex"
         8 -> hex
         else -> error("无法解析颜色: $this")

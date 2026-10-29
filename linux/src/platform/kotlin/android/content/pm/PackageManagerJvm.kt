@@ -34,5 +34,8 @@ class PackageManager(private val dataDir: File) {
 }
 
 private fun File.creationTimeOrNow(): Long = runCatching {
-    java.nio.file.Files.getAttribute(toPath(), "creationTime").toString().removeSuffix(".0").toLong()
+    java.nio.file.Files.readAttributes(
+        toPath(),
+        java.nio.file.attribute.BasicFileAttributes::class.java,
+    ).creationTime().toMillis()
 }.getOrDefault(System.currentTimeMillis())

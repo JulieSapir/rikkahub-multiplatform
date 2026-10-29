@@ -37,7 +37,7 @@ class MediaMetadataRetriever {
         const val METADATA_KEY_DURATION = 9
         const val METADATA_KEY_VIDEO_WIDTH = 18
         const val METADATA_KEY_VIDEO_HEIGHT = 19
-        const val METADATA_KEY_VIDEO_ROTATION = 23
+        const val METADATA_KEY_VIDEO_ROTATION = 24
         const val METADATA_KEY_VIDEO_FRAME_COUNT = 27
         const val OPTION_CLOSEST = 3
         const val OPTION_CLOSEST_SYNC = 2

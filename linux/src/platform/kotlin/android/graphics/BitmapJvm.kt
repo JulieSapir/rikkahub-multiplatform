@@ -56,48 +56,64 @@ class Bitmap internal constructor(internal val image: java.awt.image.BufferedIma
             val w = width.coerceAtMost(source.width - clippedX).coerceAtLeast(1)
             val h = height.coerceAtMost(source.height - clippedY).coerceAtLeast(1)
             val sub = source.image.getSubimage(clippedX, clippedY, w, h)
-            return Bitmap(if (matrix?.needsRotation == true) rotate(sub, matrix.degrees) else toArgb(sub))
+            return Bitmap(applyMatrix(sub, matrix, filter))
         }
     }
 }
 
-/** 只做上游用到的旋转，缩放/错切不经过这里 */
+/**
+ * android.graphics.Matrix 的桌面端实现，内部就是 AffineTransform：旋转/缩放/镜像统一走它，
+ * pre/post 语义与 Android 一致（pre 先应用、post 后应用），createBitmap 绘制时整体应用。
+ */
 class Matrix {
-    var degrees: Float = 0f
-        private set
+    internal val transform = java.awt.geom.AffineTransform()
 
-    fun postRotate(degrees: Float): Matrix {
-        this.degrees = (this.degrees + degrees) % 360f
-        return this
-    }
+    private fun rotation(degrees: Float) =
+        java.awt.geom.AffineTransform.getRotateInstance(Math.toRadians(degrees.toDouble()))
 
-    fun preScale(scaleX: Float, scaleY: Float): Matrix {
-        scaleApplied = scaleX < 0 || scaleY < 0
-        return this
-    }
+    private fun scaling(scaleX: Float, scaleY: Float) =
+        java.awt.geom.AffineTransform.getScaleInstance(scaleX.toDouble(), scaleY.toDouble())
 
-    var scaleApplied: Boolean = false
-        private set
+    fun preRotate(degrees: Float): Matrix = apply { transform.concatenate(rotation(degrees)) }
 
-    val needsRotation: Boolean get() = degrees.toInt() % 360 != 0
+    fun postRotate(degrees: Float): Matrix = apply { transform.preConcatenate(rotation(degrees)) }
+
+    fun preScale(scaleX: Float, scaleY: Float): Matrix = apply { transform.concatenate(scaling(scaleX, scaleY)) }
+
+    fun postScale(scaleX: Float, scaleY: Float): Matrix = apply { transform.preConcatenate(scaling(scaleX, scaleY)) }
+
+    fun setRotate(degrees: Float): Matrix = apply { transform.setToRotation(Math.toRadians(degrees.toDouble())) }
+
+    fun setScale(scaleX: Float, scaleY: Float): Matrix = apply { transform.setToScale(scaleX.toDouble(), scaleY.toDouble()) }
 }
 
-private fun rotate(image: java.awt.image.BufferedImage, degrees: Float): java.awt.image.BufferedImage {
-    val radians = Math.toRadians(degrees.toDouble())
-    val sin = abs(kotlin.math.sin(radians))
-    val cos = abs(kotlin.math.cos(radians))
-    val w = (image.width * sin + image.height * cos).toInt().coerceAtLeast(1)
-    val h = (image.width * cos + image.height * sin).toInt().coerceAtLeast(1)
-    val out = java.awt.image.BufferedImage(w, h, java.awt.image.BufferedImage.TYPE_INT_ARGB)
+/** 按 Matrix 变换绘制源图：画布取变换后包围盒，负半轴部分平移回原点 */
+private fun applyMatrix(
+    src: java.awt.image.BufferedImage,
+    matrix: Matrix?,
+    filter: Boolean,
+): java.awt.image.BufferedImage {
+    val tx = matrix?.transform
+    if (tx == null || tx.isIdentity) return toArgb(src)
+    val rect = java.awt.geom.Rectangle2D.Double(0.0, 0.0, src.width.toDouble(), src.height.toDouble())
+    val bounds = tx.createTransformedShape(rect).bounds
+    val out = java.awt.image.BufferedImage(
+        bounds.width.coerceAtLeast(1),
+        bounds.height.coerceAtLeast(1),
+        java.awt.image.BufferedImage.TYPE_INT_ARGB,
+    )
     val g = out.createGraphics()
-    g.translate(w / 2.0, h / 2.0)
-    g.rotate(radians)
-    g.drawImage(image, -image.width / 2, -image.height / 2, null)
+    g.setRenderingHint(
+        java.awt.RenderingHints.KEY_INTERPOLATION,
+        if (filter) java.awt.RenderingHints.VALUE_INTERPOLATION_BILINEAR
+        else java.awt.RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR,
+    )
+    g.translate(-bounds.x.toDouble(), -bounds.y.toDouble())
+    g.transform(tx)
+    g.drawImage(src, 0, 0, null)
     g.dispose()
     return out
 }
-
-private fun abs(v: Double) = if (v < 0) -v else v
 
 private fun toArgb(src: java.awt.image.BufferedImage): java.awt.image.BufferedImage {
     if (src.type == java.awt.image.BufferedImage.TYPE_INT_ARGB) return src
@@ -146,9 +162,8 @@ object BitmapFactory {
         opts: Options,
     ): Bitmap? = decodeStream(java.io.ByteArrayInputStream(data, offset, length), null, opts)
 
-    fun decodeFile(pathName: String): Bitmap = decodeStrict(
-        runCatching { java.io.FileInputStream(pathName) }.getOrElse { return blank() },
-    )
+    fun decodeFile(pathName: String): Bitmap =
+        runCatching { java.io.FileInputStream(pathName).use { decodeStrict(it) } }.getOrElse { blank() }
 
     fun decodeFile(pathName: String, opts: Options?): Bitmap? =
         runCatching { java.io.FileInputStream(pathName).use { decodeStream(it, null, opts) } }.getOrNull()

@@ -62,8 +62,16 @@ private fun localFileOrThrow(url: String): File {
     return file
 }
 
-private fun File.encodeToBase64(): String =
-    inputStream().use { Base64.getEncoder().encodeToString(it.readBytes()) }
+/** 流式编码，整文件读进内存会在 -Xmx512m 下让大视频 OOM */
+private fun File.encodeToBase64(): String {
+    val buffer = java.io.ByteArrayOutputStream()
+    inputStream().use { input ->
+        Base64.getEncoder().wrap(buffer).use { base64 ->
+            input.copyTo(base64, bufferSize = 8 * 1024)
+        }
+    }
+    return buffer.toString(Charsets.ISO_8859_1.name())
+}
 
 private fun File.guessMimeType(): String {
     val bytes = ByteArray(16)

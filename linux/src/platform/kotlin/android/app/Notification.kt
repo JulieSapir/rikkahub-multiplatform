@@ -56,27 +56,31 @@ class NotificationManager {
 
     fun notify(id: Int, notification: Notification) {
         shown[id] = notification
-        display(notification)
+        display(id, notification)
     }
 
     fun cancel(id: Int) {
         shown.remove(id)
+        announced.removeIf { it.startsWith("$id/") }
     }
 
     fun cancelAll() {
         shown.clear()
+        announced.clear()
     }
 
-    private fun display(notification: Notification) {
+    private fun display(id: Int, notification: Notification) {
         val message = "${notification.title} · ${notification.text}".trim()
         val tray = DesktopTray.icon
         if (tray == null) {
             Log.i(TAG, "通知[${notification.channelId}] $message")
             return
         }
-        // 常驻（进度）通知只更新内容，系统托盘没有“静默刷新”，因此仅在首次弹出
-        if (notification.ongoing && notification.channelId in announced) return
-        announced += notification.channelId
+        // 常驻（进度）通知只更新内容，系统托盘没有“静默刷新”，因此仅在首次弹出；
+        // 判重按 (id, channelId)，同一渠道里不同 id 的通知各自弹、cancel 后能再弹
+        val key = "$id/${notification.channelId}"
+        if (notification.ongoing && key in announced) return
+        announced += key
         runCatching {
             tray.displayMessage(notification.title.ifBlank { "RikkaHub" }, notification.text, TrayIcon.MessageType.NONE)
         }.onFailure {

@@ -26,10 +26,15 @@ fun Context.saveTextFile(content: String, suggestedName: String) {
     val dialog = java.awt.FileDialog(null as java.awt.Frame?, "保存", java.awt.FileDialog.SAVE).apply {
         file = suggestedName
         directory = filesDir.absolutePath
-        isVisible = true
+    }
+    // AWT 组件只能在 EDT 上显示；模态对话框在 EDT 里自旋到关闭，invokeAndWait 随之返回
+    try {
+        javax.swing.SwingUtilities.invokeAndWait { dialog.isVisible = true }
+    } catch (e: java.lang.reflect.InvocationTargetException) {
+        throw e.cause ?: e
     }
     val name = dialog.file ?: return
-    File(dialog.directory ?: filesDir.absolutePath, name).writeText(content)
+    File(dialog.directory ?: filesDir.absolutePath, name).writeText(content, Charsets.UTF_8)
 }
 
 /**

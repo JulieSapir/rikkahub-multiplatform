@@ -20,7 +20,7 @@ class ClipboardManager {
         runCatching {
             Toolkit.getDefaultToolkit().systemClipboard.setContents(clip, null)
         }.onFailure { Log.w(TAG, "写入剪贴板失败: ${it.message}") }
-        listeners.toList().forEach { it.onPrimaryClipChanged() }
+        notifyListeners()
     }
 
     /** 读剪贴板文本，取不到时返回 null，和 Android 无文本内容时一致。 */
@@ -34,15 +34,25 @@ class ClipboardManager {
     fun getText(): String = readText().orEmpty()
 
     fun addPrimaryClipChangedListener(listener: OnPrimaryClipChangedListener) {
-        listeners += listener
+        synchronized(listeners) { listeners += listener }
     }
 
     fun removePrimaryClipChangedListener(listener: OnPrimaryClipChangedListener) {
-        listeners -= listener
+        synchronized(listeners) { listeners -= listener }
     }
 
+    /** Android 清空时系统剪贴板也随之清空并回调监听者，这里保持一致。 */
     fun clearPrimaryClip() {
         primaryClip = null
+        runCatching {
+            Toolkit.getDefaultToolkit().systemClipboard.setContents(EmptyTransferable, null)
+        }.onFailure { Log.w(TAG, "清空剪贴板失败: ${it.message}") }
+        notifyListeners()
+    }
+
+    private fun notifyListeners() {
+        val snapshot = synchronized(listeners) { listeners.toList() }
+        snapshot.forEach { it.onPrimaryClipChanged() }
     }
 
     interface OnPrimaryClipChangedListener {
@@ -51,6 +61,14 @@ class ClipboardManager {
 
     companion object {
         private const val TAG = "DesktopClipboard"
+
+        /** AWT 剪贴板不接受 null 内容，清空用它顶一个“空选区”。 */
+        private val EmptyTransferable = object : java.awt.datatransfer.Transferable {
+            override fun getTransferDataFlavors(): Array<DataFlavor> = emptyArray()
+            override fun isDataFlavorSupported(flavor: DataFlavor): Boolean = false
+            override fun getTransferData(flavor: DataFlavor): Any =
+                throw java.awt.datatransfer.UnsupportedFlavorException(flavor)
+        }
 
         /** 与 Android 的 EXTRA_CLIPBOARD... 一样：从 Context.getSystemService 取的是同一个实例。 */
         internal val shared = ClipboardManager()

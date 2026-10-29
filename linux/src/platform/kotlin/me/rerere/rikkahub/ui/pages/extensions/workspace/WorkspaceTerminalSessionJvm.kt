@@ -29,11 +29,12 @@ internal fun createWorkspaceTerminalSession(
     val workspaceDir = File(File(appContext.filesDir, "workspaces"), root)
     val filesDir = File(workspaceDir, "files").apply { mkdirs() }
     val shell = TerminalSession.defaultShell()
+    val command = "cd ${shellQuote(filesDir.absolutePath)} && exec ${shellQuote(shell)} -i"
 
     return TerminalSession(
         shell,
         filesDir.absolutePath,
-        arrayOf("-c", "cd ${filesDir.absolutePath} && exec $shell -i"),
+        arrayOf("-c", command),
         arrayOf("RIKKA_WORKSPACE=$root"),
         TRANSCRIPT_ROWS,
         client,
@@ -42,6 +43,9 @@ internal fun createWorkspaceTerminalSession(
         start()
     }
 }
+
+/** 单引号包裹路径，路径里的单引号按 shell 惯例写成 '\'' ，否则带空格/引号的路径会拆成多个词。 */
+private fun shellQuote(value: String): String = "'${value.replace("'", "'\\''")}'"
 
 /** 桌面端没有 rootfs 要准备，只保证目录存在。 */
 internal fun prepareWorkspaceTerminalSession(context: Context, root: String) {
