@@ -14,8 +14,3 @@ class BatteryManager(private val context: Context) {
         const val FULL_LEVEL = 100
     }
 }
-
-/** 上游只用它做节流计时。 */
-object SystemClock {
-    fun elapsedRealtime(): Long = System.nanoTime() / 1_000_000
-}

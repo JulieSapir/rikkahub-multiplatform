@@ -15,9 +15,8 @@ import java.io.File
  * - 驱动用 Room 自带的 BundledSQLiteDriver
  * - 不跑 Android 那 5 个手写迁移；桌面端库文件独立，版本对不上时按当前 schema 重建
  * - message_fts 用 SQLite 内置 unicode61 分词器；Android 端的 simple(jieba) 依赖他们 fork 的
- *   sqlite-android 扩展，JVM 侧没有
- * 
- * MPTODO: full jieba sqlite
+ *   sqlite-android 扩展，JVM 侧没有。中文按词检索由 MessageFtsManagerJvm 在读写两侧用
+ *   jieba-analysis 预分词实现，表结构保持与 Android 一致
  */
 internal object AppDatabaseFactory {
     const val DATABASE_NAME = "database"

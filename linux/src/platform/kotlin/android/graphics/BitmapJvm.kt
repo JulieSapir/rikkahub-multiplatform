@@ -33,6 +33,8 @@ class Bitmap internal constructor(internal val image: java.awt.image.BufferedIma
 
     fun getPixel(x: Int, y: Int): Int = image.getRGB(x, y)
 
+    fun setPixel(x: Int, y: Int, color: Int) = image.setRGB(x, y, color)
+
     /** 桌面端没有硬件位图，recycle 只是断开引用 */
     fun recycle() {}
 

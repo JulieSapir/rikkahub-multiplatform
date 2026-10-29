@@ -21,8 +21,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.unit.dp
-import coil3.compose.AsyncImage
 import com.dokar.sonner.ToastType
+import com.github.panpf.zoomimage.CoilZoomAsyncImage
 import kotlinx.coroutines.launch
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Download01
@@ -32,8 +32,8 @@ import org.koin.compose.koinInject
 
 /**
  * Android 端用的是 image-viewer 那个 AAR（com.jvziyaoyao.scale，只有 Android 产物）做双指缩放，
- * 桌面端换成 HorizontalPager + AsyncImage：翻页、保存图片、Esc 关闭这些行为都保留，
- * 手势缩放交给系统（图片按原始尺寸等比显示）。
+ * 桌面端换成 HorizontalPager + zoomimage 的 CoilZoomAsyncImage：翻页、保存图片、Esc 关闭这些行为
+ * 都保留，滚轮/拖拽缩放由 zoomimage 接管（telephoto 没有 JVM 产物，见 build.gradle.kts 的说明）。
  */
 @Composable
 fun ImagePreviewDialog(
@@ -55,7 +55,7 @@ fun ImagePreviewDialog(
                 state = pagerState,
                 modifier = Modifier.fillMaxSize(),
             ) { index ->
-                AsyncImage(
+                CoilZoomAsyncImage(
                     model = images[index],
                     contentDescription = null,
                     modifier = Modifier.fillMaxSize().padding(16.dp),

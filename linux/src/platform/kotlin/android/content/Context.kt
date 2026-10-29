@@ -2,6 +2,7 @@ package android.content
 
 import android.app.desktopNotificationManager
 import android.content.pm.ApplicationInfo
+import android.media.AudioManager
 import android.net.Uri
 import android.os.BatteryManager
 import me.rerere.rikkahub.linux.service.DesktopServiceRouter
@@ -90,8 +91,8 @@ open class Context(
     fun unbindService(connection: Any?) = Unit
 
     /**
-     * 桌面端只有系统通知与电量这两个“系统服务”：前者落到托盘气泡，后者固定 100%，
-     * 都是为了让上游那几处 getSystemService 的写法不用改。
+     * 桌面端只有通知、电量、音频焦点这几个“系统服务”：分别落到托盘气泡、固定 100% 与
+     * 永远拿得到的假焦点，都是为了让上游那几处 getSystemService 的写法不用改。
      */
     @Suppress("UNCHECKED_CAST")
     fun <T> getSystemService(name: String): T = when (name) {
@@ -99,6 +100,8 @@ open class Context(
         CLIPBOARD_SERVICE -> ClipboardManager.shared
         INPUT_METHOD_SERVICE -> android.view.inputmethod.InputMethodManager.shared
         BATTERY_SERVICE -> BatteryManager(this)
+        // hooks/ASR.kt 与 VoiceMode 拿它做音频焦点，桌面端不抢焦点，恒授予
+        AUDIO_SERVICE -> AudioManager()
         // 下载服务桌面端不存在：这里返回 null，让调用处的 as DownloadManager 抛异常，
         // 从而落到 UpdateChecker 已有的“打开下载页”分支
         else -> null

@@ -79,7 +79,7 @@ class AudioFocusRequest private constructor(
 
         fun setAudioAttributes(value: AudioAttributes) = apply { attributes = value }
 
-        fun setAcceptsDelayedGainRequest(value: Boolean) = apply { delayed = value }
+        fun setAcceptsDelayedFocusGain(value: Boolean) = apply { delayed = value }
 
         fun setOnAudioFocusChangeListener(listener: AudioManager.OnAudioFocusChangeListener) = this
 

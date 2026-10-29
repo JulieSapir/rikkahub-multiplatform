@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.sqlite.SQLiteConnection
 import androidx.sqlite.SQLiteStatement
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
+import com.huaban.analysis.jieba.JiebaSegmenter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import me.rerere.ai.ui.UIMessage
@@ -17,12 +18,12 @@ import java.time.Instant
 /**
  * 消息全文搜索的桌面端版本（上游那份在 linux/build.gradle.kts 里 exclude）。
  *
- * 与 Android 版唯一的实质差别是分词：上游用他们 fork 的 sqlite-android 带的 jieba 扩展
- * （`jieba_query()` / `simple_snippet()`），JVM 侧只有 SQLite 自带的 fts5，所以这里用
- * `unicode61` 分词 + 标准 `snippet()`。表结构、方法签名与返回类型保持一致；中文按词检索会弱于
- * Android 端，英文与数字检索正常。
- * 
- * MPTODO: full jieba sqlite
+ * 与 Android 版的实质差别是分词的落点：上游用他们 fork 的 sqlite-android 自带的 jieba 扩展
+ * （`jieba_query()` / `simple_snippet()`），JVM 侧只有 SQLite 自带的 fts5，所以这里在写入与
+ * 查询两侧用 huaban 的 jieba-analysis 先切词，token 用空格 join 后交给 `unicode61` 按空格/标点
+ * 切 token，等效中文按词索引。表结构、方法签名与返回类型保持一致。代价有两个：
+ * snippet 会按分词结果显示（词与词之间多出空格）；查询是各 token 的 OR 并集召回，
+ * 召回比 Android 端 jieba_query 的精确匹配宽（可能带出只命中其中一个词的行），交给 rank 排序兜底。
  */
 enum class MessageSearchSort(val orderBy: String) {
     RELEVANCE("rank, update_at DESC"),
@@ -41,6 +42,16 @@ data class MessageSearchResult(
 
 class MessageFtsManager(private val database: AppDatabase) {
 
+    // 词典是 JVM 静态加载的，共享一个实例即可；不确定其 process 是否并发安全，调用处串行
+    private val jieba = lazy { JiebaSegmenter() }
+
+    /** 中文按词、英文按原样切，空格 join 后 fts5 的 unicode61 就能按 token 建倒排 */
+    private fun tokenize(text: String): String = synchronized(jieba) {
+        jieba.value.process(text, JiebaSegmenter.SegMode.SEARCH)
+            .joinToString(" ") { it.word }
+            .trim()
+    }
+
     private suspend fun <R> withConnection(block: (SQLiteConnection) -> R): R =
         withContext(Dispatchers.IO) {
             val path = requireNotNull(AppDatabaseFactory.databasePath) {
@@ -57,7 +68,8 @@ class MessageFtsManager(private val database: AppDatabase) {
             db.exec("DELETE FROM message_fts WHERE conversation_id = ?") { bindText(1, conversationId) }
             conversation.messageNodes.forEach { node ->
                 node.messages.forEach { message ->
-                    val text = message.extractFtsText()
+                    // 存进去的是分词后的文本，snippet 因此也会带分词空格（可接受的代价）
+                    val text = tokenize(message.extractFtsText())
                     if (text.isNotBlank()) {
                         db.exec(
                             """
@@ -117,7 +129,14 @@ class MessageFtsManager(private val database: AppDatabase) {
         """.trimIndent()
 
         val results = mutableListOf<MessageSearchResult>()
-        val match = "\"" + keyword.replace("\"", " ") + "\""
+        // 关键词同样先分词：每个 token 双引号包裹后用 OR 连接（并集召回，见类注释的语义差异说明）。
+        // 纯标点的 token 在 unicode61 下切不出词，直接丢掉；全被丢掉时退回上游那种整词匹配。
+        val match = tokenize(keyword)
+            .split(' ')
+            .map { it.trim() }
+            .filter { token -> token.any { it.isLetterOrDigit() } }
+            .joinToString(" OR ") { "\"" + it.replace("\"", " ") + "\"" }
+            .ifEmpty { "\"" + keyword.replace("\"", " ") + "\"" }
         db.prepare(sql).use { statement ->
             statement.bindText(1, match)
             if (assistantId != null) statement.bindText(2, assistantId)

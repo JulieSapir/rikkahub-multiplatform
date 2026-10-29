@@ -8,6 +8,11 @@ import android.net.Uri
 import com.drew.imaging.ImageMetadataReader
 import com.drew.imaging.png.PngChunkType
 import com.drew.metadata.png.PngDirectory
+import com.google.zxing.BinaryBitmap
+import com.google.zxing.DecodeHintType
+import com.google.zxing.MultiFormatReader
+import com.google.zxing.RGBLuminanceSource
+import com.google.zxing.common.HybridBinarizer
 import java.io.File
 
 /**
@@ -102,14 +107,37 @@ object ImageUtils {
     }
 
     /**
-     * 上游用 zxing 的 Android 解码路径识别二维码；桌面端没有可用的 QR 解码器，
-     * 返回 null，提供商页因此提示“图里没找到二维码”，用户改用粘贴 Key。
+     * 与上游 decodeQRCodeFromBitmap 同一条 zxing 链路：像素数组 → RGBLuminanceSource →
+     * HybridBinarizer → MultiFormatReader。桌面端 Bitmap 内部是 BufferedImage，直接取像素。
      */
+    fun decodeQRCodeFromBitmap(bitmap: Bitmap): String? = runCatching {
+        val width = bitmap.width
+        val height = bitmap.height
+        if (width <= 0 || height <= 0) return null
+        val pixels = IntArray(width * height)
+        bitmap.image.getRGB(0, 0, width, height, pixels, 0, width)
+
+        val reader = MultiFormatReader()
+        reader.setHints(mapOf(DecodeHintType.TRY_HARDER to true))
+        val result = reader.decode(BinaryBitmap(HybridBinarizer(RGBLuminanceSource(width, height, pixels))))
+        result.text
+    }.onFailure {
+        it.printStackTrace()
+    }.getOrNull()
+
+    /** 与 Android 版一致：loadOptimizedBitmap 解码后交给 zxing 识别，识别不出返回 null。 */
     fun decodeQRCodeFromUri(
         context: Context,
         uri: Uri,
         maxSize: Int = 2048,
-    ): String? = null
+    ): String? {
+        val bitmap = loadOptimizedBitmap(context, uri, maxSize) ?: return null
+        return try {
+            decodeQRCodeFromBitmap(bitmap)
+        } finally {
+            bitmap.recycle()
+        }
+    }
 
     private val HEIF_BRANDS = setOf("heic", "heix", "hevc", "hevx", "mif1", "msf1", "heim", "hema", "hevm", "hevs")
 

@@ -73,13 +73,12 @@ kotlin {
             exclude("**/utils/ContextUtil.kt")
             // 只给 Android Studio 预览用
             exclude("**/highlight/HighlighterPreview.kt")
-            // 语音实现走 media3，桌面端只保留设置数据类
-            exclude("**/asr/providers/**")
+            // 云端 ASR 的 5 个 provider 与 hooks/ASR.kt 平台无关（okhttp websocket），原样编译：
+            // 唯一的 Android 依赖 AudioRecord 由 android/media/AudioRecordJvm.kt 的 TargetDataLine 顶替
             // 系统 TTS 引擎是 Android 的 TextToSpeech，桌面端由 SystemTTSProviderJvm.kt 顶位；
             // 其余云端 provider 全是 okhttp，直接复用
             exclude("**/tts/provider/providers/SystemTTSProvider.kt")
             exclude("**/tts/controller/**")
-            exclude("**/ui/hooks/ASR.kt")
             exclude("**/ui/hooks/TTS.kt")
             // 头像形变的无限动画在 loading=false 时也照跑，会让桌面端静止页面一直重绘，
             // 由 AvatarShapeJvm.kt 顶位成「只有生成中才动画」
@@ -144,7 +143,7 @@ kotlin {
             exclude("**/ui/components/ui/FloatingWindow.kt")
             // TTS 播放控制器依赖 Android 悬浮窗，桌面端朗读整体未接
             exclude("**/ui/components/ui/TTSController.kt")
-            exclude("**/ui/components/ui/QRCode.kt")
+            // QRCode 只用 zxing core 的纯 Java API，配合 androidx.core.graphics 的位图 shim 直接编译
             // Rabbit 加载动画是 AnimatedVectorDrawable + AndroidView，桌面端由 RabbitLoadingJvm.kt 顶位
             exclude("**/ui/components/ui/RabbitLoading.kt")
             exclude("**/ui/components/ui/ShareSheet.kt")
@@ -391,6 +390,20 @@ dependencies {
     // 脚本搜索服务：search/SearchService.kt 的工厂会引用它，用 quickjs 的 JVM 产物
     implementation("io.github.dokar3:quickjs-kt-jvm:${libs.versions.quickjs.get()}")
     implementation(libs.diffutils)
+
+    // LaTeX 公式排版：jlatexmath 是纯 Java 的 AWT 渲染引擎，顶替 Android 端 jlatexmath-android
+    implementation("org.scilab.forge:jlatexmath:1.0.7")
+    // 图片缩放：首选的 telephoto 只有 Android 产物（Maven Central 全系没有 jvm 变体），
+    // 换 panpf zoomimage 的 coil3 版：KMP 发布，1.7.0 按 JetBrains Compose 1.12.0 编译，与本端 1.12.1 对齐
+    implementation("io.github.panpf.zoomimage:zoomimage-compose-coil3:1.7.0")
+    // 二维码识别：zxing core 是纯 Java 的，QRCode.kt 的生成与 ImageUtils 的解码共用它
+    implementation(libs.zxing.core)
+    // 相机扫码：webcam-capture 自带 v4l2/DSHOW 原生驱动做取流，顶替 quickie 的 CameraX 链路
+    implementation("com.github.sarxos:webcam-capture:0.3.12")
+    // 音效播放：mp3spi 是 JavaSound 的 MP3 解码 SPI，注册后 AudioSystem 能直接解上游 raw 里的 mp3
+    implementation("com.googlecode.soundlibs:mp3spi:1.9.5.4")
+    // 全文搜索分词：与 Android 端 jieba 扩展同源的纯 Java 实现，中文按词切分后走 fts5 unicode61
+    implementation("com.huaban:jieba-analysis:1.0.2")
 
     testImplementation(libs.junit)
 }
