@@ -36,6 +36,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.ui.platform.LocalContext
 import com.termux.view.DesktopTerminalView
 import com.termux.view.TerminalView
 import me.rerere.rikkahub.R
@@ -56,7 +57,9 @@ fun WorkspaceTerminalPage(id: String) {
     val vm: WorkspaceDetailVM = koinViewModel(parameters = { parametersOf(id) })
     val state by vm.state.collectAsStateWithLifecycle()
     val sessionManager: WorkspaceTerminalSessionManager = koinInject()
-    val root = state.workspace?.root
+    val context = LocalContext.current
+    val workspace = state.workspace
+    val root = workspace?.root
     val terminalStateFlow = remember(root, sessionManager) {
         root?.let(sessionManager::observeWorkspace)
     }
@@ -64,10 +67,13 @@ fun WorkspaceTerminalPage(id: String) {
         ?: WorkspaceTerminalTabsState()
 
     var pendingCloseTabId by remember(root) { mutableStateOf<Long?>(null) }
-    val shellCompatibilityMode = state.workspace?.shellCompatibilityMode ?: false
 
-    LaunchedEffect(root, shellCompatibilityMode) {
-        root?.let { sessionManager.ensureSession(it, shellCompatibilityMode) }
+    LaunchedEffect(root) {
+        // 上游 Manager 以 hasRootfs 决定就绪状态；桌面端跑宿主机 shell，先放一个探针文件让它判真
+        workspace?.let {
+            ensureDesktopRootfsProbe(context, it.root)
+            sessionManager.ensureSession(it)
+        }
     }
 
     RikkahubTheme(colorMode = ColorMode.DARK) {
@@ -76,7 +82,7 @@ fun WorkspaceTerminalPage(id: String) {
                 root = root,
                 state = terminalState,
                 contentPadding = innerPadding,
-                onCreateTab = { root?.let { sessionManager.createTab(it, shellCompatibilityMode) } },
+                onCreateTab = { workspace?.let(sessionManager::createTab) },
                 onSelectTab = { tabId -> root?.let { sessionManager.selectTab(it, tabId) } },
                 onCloseTab = { tabId -> pendingCloseTabId = tabId },
             )

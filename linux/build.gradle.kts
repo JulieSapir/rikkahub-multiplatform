@@ -37,7 +37,8 @@ kotlin {
             // 根目录不同而失效。
             srcDir("../common/src/main/java")
             srcDir("../ai/src/main/java")
-            srcDir("../highlight/src/main/java")
+            // 上游已删除 highlight 模块（Markdown 高亮改走 bettertext）；桌面端仍用旧管线，
+            // 44 个纯 Kotlin 源文件恢复在 linux/src/main/kotlin/me/rerere/highlight 下
             srcDir("../material3/src/main/java")
             srcDir("../material3/material-color-utilities/kotlin")
             srcDir("../mediagen/src/main/java")
@@ -112,12 +113,17 @@ kotlin {
             exclude("**/data/db/AppDatabaseFactory.kt")
             exclude("**/data/db/SQLiteConfiguration.kt")
             // 只有用了 Android SupportSQLiteDatabase 的手写迁移要换掉，
-            // Migration_8_9 / 16_17 / 22_23 是 AutoMigrationSpec 标记类，跨平台可用
+            // Migration_8_9 / 16_17 / 22_23 是 AutoMigrationSpec 标记类，跨平台可用；
+            // 27_28 / 30_31 是 SupportSQLiteDatabase 迁移，桌面端走破坏性迁移不需要；
+            // 28_29 是 AutoMigrationSpec（AppDatabase 声明里引用），由 main/kotlin 的 SQLiteConnection 版本顶位
             exclude("**/data/db/migrations/Migration_6_7.kt")
             exclude("**/data/db/migrations/Migration_11_12.kt")
             exclude("**/data/db/migrations/Migration_13_14.kt")
             exclude("**/data/db/migrations/Migration_14_15.kt")
             exclude("**/data/db/migrations/Migration_15_16.kt")
+            exclude("**/data/db/migrations/Migration_27_28.kt")
+            exclude("**/data/db/migrations/Migration_28_29.kt")
+            exclude("**/data/db/migrations/Migration_30_31.kt")
             exclude("**/data/db/migrations/MigrationUtils.kt")
             // fts 用 linux 侧的 JVM 版本（上游那份依赖 jieba 扩展与 openHelper）
             exclude("**/data/db/fts/MessageFtsManager.kt")
@@ -135,6 +141,16 @@ kotlin {
             exclude("**/ui/components/richtext/Mermaid.kt")
             exclude("**/ui/components/richtext/SimpleHtmlBlock.kt")
             exclude("**/ui/components/richtext/ZoomableAsyncImage.kt")
+            // 上游把 markdown 渲染迁移到了 bettertext（绑 android.text.StaticLayout / Canvas / Paint，
+            // 没有 JVM 产物），桌面端保留旧管线：main/kotlin 里的 Markdown.kt / MarkdownNew.kt /
+            // HighlightCodeBlock.kt（c907608b 版本）+ highlight 模块源码 + 同名 CodeColor/MarkdownUtils 顶位
+            exclude("**/ui/components/richtext/Markdown.kt")
+            exclude("**/ui/components/richtext/MaterialMarkdown.kt")
+            exclude("**/ui/components/richtext/HighlightCodeBlock.kt")
+            exclude("**/ui/components/richtext/CodeHighlightText.kt")
+            exclude("**/ui/components/richtext/SelectableContent.kt")
+            exclude("**/utils/MarkdownUtils.kt")
+            exclude("**/ui/theme/CodeColor.kt")
             // 这些组件用了 Android 权限/相册/播放器/FloatingX 等能力
             // 图片预览与离屏位图渲染绑 Android 视图树，桌面端由 *Jvm.kt 顶位
             exclude("**/ui/components/ui/ImagePreviewDialog.kt")
@@ -151,7 +167,9 @@ kotlin {
             // 生成循环 / 工具调用 / 备份同步都依赖 Android 侧的仓储与前台服务
             // 聊天编排（ChatService / ConversationSession / MessageQueue）是平台无关的，放开；
             // Android DocumentsProvider（工作区文件对外暴露）桌面端不需要，直接排除
+            // 上游把它挪到了 service/ 包，两个路径都排
             exclude("**/data/provider/WorkspaceDocumentsProvider.kt")
+            exclude("**/service/WorkspaceDocumentsProvider.kt")
             // 备份/导出与设备信息占位符依赖 Android 的 SQLite 与 FileProvider，用 JVM 版本替代
             exclude("**/data/sync/DatabaseBackup.kt")
             exclude("**/data/sync/BackupManager.kt")
@@ -159,10 +177,27 @@ kotlin {
             // 设备类本地工具（日历、屏幕时间）走 Android ContentProvider，桌面端没有对应能力
             exclude("**/data/ai/tools/local/CalendarTool.kt")
             exclude("**/data/ai/tools/local/ScreenTimeTool.kt")
+            // SSH 凭据加密用 Android Keystore，桌面端由 main/kotlin 同名实现换成落盘密钥的 AES/GCM
+            exclude("**/utils/SecretCipher.kt")
+            // 应用 logo 取 AdaptiveIconDrawable 两层再由 View 层画，桌面端由 main/kotlin 同名实现
+            // 用构建期合成的 ic_launcher 位图直接画（android-res 任务已按 adaptive-icon 合成）
+            exclude("**/ui/components/ui/AppLogo.kt")
             // 只有 Android 前台服务与通知壳用 JVM 版本替代
             exclude("**/service/ChatGenerationForegroundService.kt")
             exclude("**/service/MediaCreationForegroundService.kt")
             exclude("**/service/WebServerService.kt")
+            // Memory Dream（回忆整理）的前台服务壳，桌面端由 DesktopServiceRouter 直接跑协程
+            exclude("**/service/MemoryDreamForegroundService.kt")
+            // Android 悬浮窗气泡/面板（FloatingX + 前台服务保活），桌面端窗口由窗口系统管理；
+            // AppModule 里的 koin 单例由 main/kotlin 的 ChatFloatingWindowsJvm 空实现顶位
+            exclude("me/rerere/rikkahub/ui/floating/ChatFloatingWindows.kt")
+            exclude("me/rerere/rikkahub/ui/floating/ChatFloatingContent.kt")
+            // 相机扫码页绑 CameraX + 系统权限，桌面端由 main/kotlin 同名实现走 webcam-capture
+            exclude("**/ui/components/ui/QRCodeScanner.kt")
+            // 图片裁剪：对话框绑 DialogWindowProvider 系统窗口与 ui 模块资源，解码绑 ImageDecoder；
+            // ImageCropper / ImageCropState 是纯 Compose（systemGestureExclusion 由 shim 置空），保留
+            exclude("**/ui/crop/ImageCropDialog.kt")
+            exclude("**/ui/crop/ImageCropImage.kt")
             // OAuth：Custom Tabs 拉起浏览器与前台服务保活这两壳换成 *Jvm.kt 顶位
             exclude("**/OAuthAuthorizationLauncher.kt")
             exclude("**/OAuthCallbackForegroundService.kt")
@@ -404,6 +439,11 @@ dependencies {
     implementation("com.googlecode.soundlibs:mp3spi:1.9.5.4")
     // 全文搜索分词：与 Android 端 jieba 扩展同源的纯 Java 实现，中文按词切分后走 fts5 unicode61
     implementation("com.huaban:jieba-analysis:1.0.2")
+
+    // workspace 模块的 SSH 后端：jsch 是纯 JVM 的 SSH/SFTP 实现，bcprov 提供 Ed25519 等算法
+    // （与 Android 端同一套坐标，见 catalog 的 jsch / bouncycastle-bcprov）
+    implementation(libs.jsch)
+    implementation(libs.bouncycastle.bcprov)
 
     testImplementation(libs.junit)
 }

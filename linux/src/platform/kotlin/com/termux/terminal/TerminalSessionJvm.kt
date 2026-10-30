@@ -1,27 +1,33 @@
 package com.termux.terminal
 
-import com.pty4j.PtyProcess
-import com.pty4j.PtyProcessBuilder
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.concurrent.thread
 
 /**
- * Termux 的 TerminalSession 靠它的 JNI（`libtermux.so` + Android 的 socketpair）起 shell，
- * 桌面端换成 JetBrains 的 pty4j：同样是伪终端，输出喂给 Termux 那份纯 Java 的
- * [com.termux.terminal.TerminalEmulator] 解析，VT100 行为与 Android 端一致。
+ * Termux 的 TerminalSession 靠它的 JNI（libtermux.so + Android 的 socketpair）起进程。上游新版把
+ * 「怎么起进程」抽成了 [TerminalTransport]（本地 pty 走 LocalPtyTransport，远程 SSH 走
+ * SshTerminalTransport），这里提供同一构造签名的桌面版：进程由 pty4j 起本地伪终端，输出喂给
+ * Termux 那份纯 Java 的 TerminalEmulator 解析，VT100 行为与 Android 端一致。
  *
- * 类名、构造参数与上游用到的成员都对齐 Termux 0.118，
- * 因此 WorkspaceTerminalSessionManager 不用改；aar 里的同名类在 build.gradle.kts 里被剔除了。
+ * 类名、构造参数与上游用到的成员对齐（transport 版构造 + 旧版本地 shell 构造），
+ * WorkspaceTerminalSessionManager / TerminalView 不用改。
  */
-class TerminalSession(
-    private val shellPath: String,
-    private val workingDirectory: String,
-    private val args: Array<String>,
-    private val envAdditions: Array<String>,
+class TerminalSession constructor(
+    private val transport: TerminalTransport,
     @Suppress("UNUSED_PARAMETER") transcriptRows: Int,
     private val sessionClient: TerminalSessionClient,
 ) : TerminalOutput() {
+
+    /** 与上游旧构造等价：本地 shell 直起一份 pty。 */
+    constructor(
+        shellPath: String,
+        workingDirectory: String,
+        args: Array<String>,
+        envAdditions: Array<String>,
+        transcriptRows: Int,
+        sessionClient: TerminalSessionClient,
+    ) : this(LocalPtyTransport(shellPath, workingDirectory, args, envAdditions), transcriptRows, sessionClient)
 
     var mSessionName: String? = null
 
@@ -32,45 +38,34 @@ class TerminalSession(
     val isSessionFinished: Boolean get() = finished.get()
 
     private val finished = AtomicBoolean(false)
-    private var process: PtyProcess? = null
-    private var reader: Thread? = null
+    private val started = AtomicBoolean(false)
 
-    fun isRunning(): Boolean = process?.isAlive == true
+    fun isRunning(): Boolean = started.get() && !finished.get()
 
-    /** 启动 shell；失败时按 Termux 的约定回报 finish，让上层显示错误而不是崩溃。 */
-    fun start(): Boolean = runCatching {
-        val commands = mutableListOf(shellPath).apply { addAll(args.mapNotNull { it.takeIf { a -> a.isNotEmpty() } }) }
-        val pty = PtyProcessBuilder(commands.toTypedArray())
-            .setDirectory(workingDirectory)
-            .setEnvironment(envMap())
-            .setConsole(false)
-            .setInitialColumns(INITIAL_COLUMNS)
-            .setInitialRows(INITIAL_ROWS)
-            .start()
-        process = pty
-        reader = thread(isDaemon = true, name = "terminal-reader-${mSessionName ?: "session"}") { readLoop(pty) }
-        true
-    }.getOrElse {
-        sessionClient.logStackTraceWithMessage(TAG, "无法启动 shell: $shellPath", Exception(it.message))
-        finish()
-        false
-    }
-
-    private fun envMap(): Map<String, String> {
-        val base = System.getenv().toMutableMap()
-        envAdditions.forEach { entry ->
-            val index = entry.indexOf('=')
-            if (index > 0) base[entry.substring(0, index)] = entry.substring(index + 1)
+    /** 启动进程；失败时按 Termux 的约定回报 finish，让上层显示错误而不是崩溃。 */
+    fun start(): Boolean {
+        if (!started.compareAndSet(false, true)) return true
+        val startDescription = transport.describeStart()
+        if (startDescription != null) {
+            val banner = "[$startDescription]\r\n".toByteArray(Charsets.UTF_8)
+            emulator.append(banner, banner.size)
+            sessionClient.onTextChanged(this)
         }
-        base["TERM"] = base["TERM"] ?: "xterm-256color"
-        base["LANG"] = base["LANG"] ?: "C.UTF-8"
-        return base
+        return runCatching {
+            transport.start(INITIAL_COLUMNS, INITIAL_ROWS)
+            thread(isDaemon = true, name = "terminal-reader-${mSessionName ?: "session"}") { readLoop() }
+            true
+        }.getOrElse {
+            sessionClient.logStackTraceWithMessage(TAG, "无法启动 shell", Exception(it.message))
+            finish()
+            false
+        }
     }
 
-    private fun readLoop(pty: PtyProcess) {
+    private fun readLoop() {
         val buffer = ByteArray(8 * 1024)
         runCatching {
-            pty.inputStream.use { input ->
+            transport.getInputStream().use { input ->
                 while (true) {
                     val read = input.read(buffer)
                     if (read < 0) break
@@ -81,12 +76,18 @@ class TerminalSession(
         }.onFailure {
             if (!finished.get()) sessionClient.logStackTraceWithMessage(TAG, "终端读取失败", Exception(it.message))
         }
+        val exitStatus = runCatching { transport.waitFor() }.getOrDefault(-1)
+        val exitDescription = transport.describeExit(exitStatus)
+        if (exitDescription != null) {
+            val line = "[$exitDescription]\r\n".toByteArray(Charsets.UTF_8)
+            emulator.append(line, line.size)
+        }
         finish()
     }
 
-    /** 键盘输入写入 pty（Termux 的 TerminalSession.write 就是这个）。 */
+    /** 键盘输入写入进程（Termux 的 TerminalSession.write 就是这个）。 */
     override fun write(bytes: ByteArray, offset: Int, count: Int) {
-        val output = process?.outputStream ?: return
+        val output = runCatching { transport.getOutputStream() }.getOrNull() ?: return
         runCatching {
             output.write(bytes, offset, count)
             output.flush()
@@ -101,19 +102,19 @@ class TerminalSession(
 
     fun onResize(columns: Int, rows: Int) {
         emulator.resize(columns, rows)
-        runCatching { process?.setWinSize(com.pty4j.WinSize(rows.coerceAtLeast(1), columns.coerceAtLeast(1))) }
+        if (isRunning()) runCatching { transport.setWindowSize(columns, rows) }
     }
 
     fun finishIfRunning() {
-        if (isRunning()) {
-            runCatching { process?.destroy() }
+        if (started.get()) {
+            runCatching { transport.kill() }
         }
         finish()
     }
 
     private fun finish() {
         if (!finished.compareAndSet(false, true)) return
-        reader?.interrupt()
+        runCatching { transport.close() }
         sessionClient.onSessionFinished(this)
     }
 

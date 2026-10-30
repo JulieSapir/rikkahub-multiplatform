@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.pager.HorizontalPager
@@ -21,13 +22,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.unit.dp
-import com.dokar.sonner.ToastType
 import com.github.panpf.zoomimage.CoilZoomAsyncImage
 import kotlinx.coroutines.launch
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Download01
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.ui.context.LocalToaster
+import me.rerere.ui.toast.ToastType
 import org.koin.compose.koinInject
 
 /**
@@ -39,12 +40,14 @@ import org.koin.compose.koinInject
 fun ImagePreviewDialog(
     images: List<String>,
     onDismissRequest: () -> Unit,
+    initialPage: Int = 0,
+    actions: @Composable RowScope.(page: Int) -> Unit = {},
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val filesManager: FilesManager = koinInject()
     val toaster = LocalToaster.current
-    val pagerState = rememberPagerState { images.size }
+    val pagerState = rememberPagerState(initialPage = initialPage) { images.size }
 
     Dialog(
         onDismissRequest = onDismissRequest,
@@ -77,6 +80,7 @@ fun ImagePreviewDialog(
                         RoundedCornerShape(12.dp),
                     ).padding(horizontal = 10.dp, vertical = 4.dp),
                 )
+                actions(pagerState.currentPage)
                 IconButton(onClick = {
                     scope.launch {
                         runCatching {

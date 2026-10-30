@@ -105,14 +105,16 @@ class MessageFtsManager(private val database: AppDatabase) {
     suspend fun search(
         keyword: String,
         sort: MessageSearchSort = MessageSearchSort.RELEVANCE,
-        assistantId: String? = null,
+        // 只搜这些助手的对话，null 表示不限（与上游新版签名一致）
+        assistantIds: Collection<String>? = null,
     ): List<MessageSearchResult> = withConnection { db ->
-        val assistantFilter = if (assistantId != null) {
+        val assistantFilter = if (assistantIds != null) {
+            val placeholders = assistantIds.joinToString(", ") { "?" }
             """
             AND EXISTS (
                 SELECT 1 FROM conversationentity AS conversation
                 WHERE conversation.id = message_fts.conversation_id
-                  AND conversation.assistant_id = ?
+                  AND conversation.assistant_id IN ($placeholders)
             )
             """.trimIndent()
         } else {
@@ -139,7 +141,7 @@ class MessageFtsManager(private val database: AppDatabase) {
             .ifEmpty { "\"" + keyword.replace("\"", " ") + "\"" }
         db.prepare(sql).use { statement ->
             statement.bindText(1, match)
-            if (assistantId != null) statement.bindText(2, assistantId)
+            assistantIds?.forEachIndexed { index, id -> statement.bindText(index + 2, id) }
             while (statement.step()) {
                 results.add(
                     MessageSearchResult(
