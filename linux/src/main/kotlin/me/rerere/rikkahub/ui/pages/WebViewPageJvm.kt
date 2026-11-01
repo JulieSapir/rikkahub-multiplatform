@@ -1,82 +1,199 @@
 package me.rerere.rikkahub.ui.pages.webview
 
-import android.content.Context
-import androidx.compose.foundation.layout.Arrangement
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.ui.Alignment
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
-import me.rerere.common.android.appTempFolder
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.ArrowRight01
+import me.rerere.hugeicons.stroke.Bug01
+import me.rerere.hugeicons.stroke.Earth
+import me.rerere.hugeicons.stroke.MoreVertical
+import me.rerere.hugeicons.stroke.Refresh01
+import me.rerere.rikkahub.linux.web.CefWebView
+import me.rerere.rikkahub.linux.web.openInSystemBrowser
 import me.rerere.rikkahub.ui.components.nav.BackButton
+import me.rerere.rikkahub.ui.theme.JetbrainsMono
+import me.rerere.ui.webview.WEB_VIEW_BASE_URL
+import me.rerere.ui.webview.WebContent
 import me.rerere.ui.webview.WebViewContentCache
-import java.awt.Desktop
-import java.io.File
-import java.net.URI
+import me.rerere.ui.webview.WebViewMode
+import me.rerere.ui.webview.rememberWebViewState
 
 /**
- * 上游这个页面内嵌 Android WebView 渲染 Markdown 预览（marked + katex + mermaid + highlight.js）。
- * 桌面端没有 WebView 组件，改成把同一份 HTML 落到缓存目录并用系统默认浏览器打开：
- * 数学公式、mermaid 图与高亮在浏览器里都是完整渲染的，比在 Compose 里重新实现一套更准。
+ * 上游 WebViewPage 的桌面端版本：结构照抄（标题栏、刷新/前进、在浏览器打开、控制台），
+ * 区别只在网页走原生窗口模式（[WebViewMode.Native]）——全屏页面不会被滚动或遮挡，
+ * GPU 直出省掉离屏模式每帧的像素拷贝。
+ *
+ * 原生窗口总在 Compose 内容之上，下拉菜单和控制台面板会被它挡住，所以它们打开时先把网页藏起来。
  */
 @Composable
 fun WebViewPage(url: String, contentId: String) {
     val context = LocalContext.current
-    val file = remember(contentId, url) {
-        when {
-            contentId.isNotEmpty() -> WebViewContentCache.load(context.cacheDir, contentId)
-                ?.let { writeHtmlFile(context, it) }
-            else -> null
+    val state = if (url.isNotEmpty()) {
+        rememberWebViewState(url = url)
+    } else {
+        val content = remember(contentId) {
+            WebViewContentCache.load(context.cacheDir, contentId).orEmpty()
         }
+        rememberWebViewState(
+            data = content,
+            baseUrl = WEB_VIEW_BASE_URL,
+            mimeType = "text/html",
+        )
+    }
+
+    var showDropdown by remember { mutableStateOf(false) }
+    var showConsoleSheet by remember { mutableStateOf(false) }
+    val sheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden)
+
+    BackHandler(state.canGoBack) {
+        state.goBack()
     }
 
     Scaffold(
-        topBar = { BackButton() },
-    ) { padding ->
-        Column(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text(
+                        text = state.pageTitle?.takeIf { it.isNotEmpty() } ?: state.currentUrl ?: "",
+                        maxLines = 1,
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                },
+                navigationIcon = {
+                    BackButton()
+                },
+                actions = {
+                    IconButton(onClick = { state.reload() }) {
+                        Icon(HugeIcons.Refresh01, contentDescription = "Refresh")
+                    }
+
+                    IconButton(
+                        onClick = { state.goForward() },
+                        enabled = state.canGoForward,
+                    ) {
+                        Icon(HugeIcons.ArrowRight01, contentDescription = "Forward")
+                    }
+
+                    val urlHandler = LocalUriHandler.current
+                    IconButton(onClick = { showDropdown = true }) {
+                        Icon(HugeIcons.MoreVertical, contentDescription = "More options")
+
+                        DropdownMenu(
+                            expanded = showDropdown,
+                            onDismissRequest = { showDropdown = false },
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Open in Browser") },
+                                leadingIcon = { Icon(HugeIcons.Earth, contentDescription = null) },
+                                onClick = {
+                                    showDropdown = false
+                                    // 本地内容的地址是虚拟域名，系统浏览器打不开，落成文件再打开
+                                    val current = state.currentUrl
+                                    if (state.content is WebContent.Data || current.isNullOrBlank()) {
+                                        openInSystemBrowser(context, state.content)
+                                    } else {
+                                        urlHandler.openUri(current)
+                                    }
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Console Logs") },
+                                leadingIcon = { Icon(HugeIcons.Bug01, contentDescription = null) },
+                                onClick = {
+                                    showDropdown = false
+                                    showConsoleSheet = true
+                                },
+                            )
+                        }
+                    }
+                },
+            )
+        },
+    ) {
+        CefWebView(
+            state = state,
+            mode = WebViewMode.Native,
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
-                .padding(24.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
-            horizontalAlignment = Alignment.CenterHorizontally,
+                .padding(it),
+            visible = !showDropdown && !showConsoleSheet,
+            onCreated = {},
+            onUpdated = {},
+        )
+    }
+
+    if (showConsoleSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showConsoleSheet = false },
+            sheetState = sheetState,
         ) {
-            Text(
-                text = if (url.isNotEmpty() || file != null) "在系统浏览器中打开预览" else "没有可预览的内容",
-                style = MaterialTheme.typography.titleMedium,
-            )
-            Text(
-                text = file?.absolutePath ?: url,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Button(onClick = { openExternally(context, url, file) }) {
-                Text("打开")
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+            ) {
+                Text(
+                    text = "Console Logs",
+                    style = MaterialTheme.typography.headlineSmall,
+                    modifier = Modifier.padding(bottom = 16.dp),
+                )
+
+                SelectionContainer {
+                    LazyColumn {
+                        items(state.consoleMessages) { message ->
+                            Text(
+                                text = "${message.messageLevel().name}: ${message.message()}\n" +
+                                    "Source: ${message.sourceId()}:${message.lineNumber()}",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontFamily = JetbrainsMono,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp),
+                                color = when (message.messageLevel().name) {
+                                    "ERROR" -> MaterialTheme.colorScheme.error
+                                    "WARNING" -> MaterialTheme.colorScheme.secondary
+                                    else -> MaterialTheme.colorScheme.onSurface
+                                },
+                            )
+                        }
+                    }
+                }
+
+                if (state.consoleMessages.isEmpty()) {
+                    Text(
+                        text = "No console messages",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(16.dp),
+                    )
+                }
             }
         }
     }
-}
-
-private fun writeHtmlFile(context: Context, html: String): File? = runCatching {
-    // 预览页是一次性的，落进 appTempFolder（启动时清空），不能在 cacheDir 只写不清
-    val target = File(context.appTempFolder, "preview_${System.nanoTime()}.html")
-    target.writeText(html, Charsets.UTF_8)
-    target
-}.getOrNull()
-
-private fun openExternally(context: Context, url: String, file: File?) {
-    val uri = when {
-        url.isNotEmpty() -> runCatching { URI(url) }.getOrNull()
-        else -> file?.toURI()
-    } ?: return
-    val opened = runCatching { Desktop.getDesktop().browse(uri) }.isSuccess
-    if (!opened) context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(uri.toString())))
 }

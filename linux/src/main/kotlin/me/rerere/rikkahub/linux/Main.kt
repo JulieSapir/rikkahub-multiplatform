@@ -38,6 +38,7 @@ fun main() {
         DesktopBootstrap.afterKoin(appContext)
         application { DesktopWindow(activity) }
     } finally {
+        me.rerere.rikkahub.linux.web.KcefRuntime.shutdown()
         stopKoin()
     }
 }

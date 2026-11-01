@@ -151,10 +151,9 @@ kotlin {
             // （脚本搜索用 quickjs 的 JVM 产物，见 dependencies 里的 quickjs-jvm）
             // ui 模块里的位图/画板/WebView 是 Android 专属
             exclude("**/ui/sketch/**")
-            // WebView 控件是 Android 的，WebViewContentCache 只是往缓存目录写 HTML，跨平台可用
-            // WebView 控件与它的本地资源拦截都是 Android 的，桌面端由 webview/WebViewJvm.kt 顶位
+            // WebView 控件是 Android 的，桌面端由 webview/WebViewJvm.kt（KCEF）顶位；
+            // WebViewLocalAssets / WebViewContentCache 只用 Context、Uri 与 WebResourceResponse，原样编译
             exclude("**/ui/webview/WebView.kt")
-            exclude("**/ui/webview/WebViewLocalAssets.kt")
             // 关于页彩蛋的粒子循环原本没有粒子时也每帧 withFrameNanos，会让静止页面一直重绘；
             // 由 source-compat 规则改成跑完就退出
             exclude("**/ui/easteregg/EmojiBurst.kt")
@@ -196,9 +195,8 @@ kotlin {
             exclude("**/ui/pages/webview/**")
             // 这些设置页绑的是 Android 能力：前台服务/通知/相册/剪贴板权限/TTS-ASR 播放
             exclude("**/ui/activity/**")
-            // mermaid(WebView) 与图片缩放(image-viewer AAR) 是 Android 专属实现，
-            // 桌面端由 richtext/MermaidJvm.kt、RichtextJvm.kt 顶位
-            exclude("**/ui/components/richtext/Mermaid.kt")
+            // 图片缩放(image-viewer AAR) 是 Android 专属实现，桌面端由 richtext/RichtextJvm.kt 顶位。
+            // Mermaid 原样编译：WebView 与 JavascriptInterface 由桌面端的 KCEF 实现提供
             exclude("**/ui/components/richtext/ZoomableAsyncImage.kt")
             // bettertext：markdown / highlight / 公式排版是纯 Compose + Kotlin，原样编译（android.graphics 的
             // Canvas/Paint/Path 由 src/platform 下的 Skia 实现顶替）。只有 text 模块里基于 StaticLayout 的排版与
@@ -442,6 +440,15 @@ dependencies {
     // JetBrains 的纯 JVM 伪终端库，工作区终端用它起 shell
     implementation("org.jetbrains.pty4j:pty4j:0.13.1")
 
+    // 内嵌网页（Mermaid / HTML 预览 / 网页页）：KCEF 包着 JetBrains 的 JCEF。只用带 handler 的离屏渲染与窗口模式，
+    // 这两条都不走 JOGL，所以剔掉它（JOGL 也不在 Maven Central 上）。CEF 运行时由 KcefRuntime 首次使用时下载
+    implementation("dev.datlag:kcef:2025.03.23") {
+        exclude(group = "org.jogamp.gluegen")
+        exclude(group = "org.jogamp.jogl")
+    }
+    // 解 CEF 运行时的 tar.gz（KCEF 本身也依赖它，这里显式声明直接用到的版本）
+    implementation("org.apache.commons:commons-compress:1.27.1")
+
     // foundation / ui / animation 由 desktop 运行时带进来，这里只声明直接用的
     implementation(compose.desktop.currentOs)
 
@@ -581,6 +588,10 @@ compose.desktop {
             "-XX:MaxMetaspaceSize=128m",
             "-XX:+AutoCreateSharedArchive",
             "-XX:SharedArchiveFile=build/rikka-linux.jsa",
+            // JCEF 的原生窗口模式要从 AWT peer 拿 X11 窗口句柄
+            "--add-opens", "java.desktop/sun.awt=ALL-UNNAMED",
+            "--add-opens", "java.desktop/sun.awt.X11=ALL-UNNAMED",
+            "--add-opens", "java.desktop/java.awt.peer=ALL-UNNAMED",
         )
 
         nativeDistributions {
