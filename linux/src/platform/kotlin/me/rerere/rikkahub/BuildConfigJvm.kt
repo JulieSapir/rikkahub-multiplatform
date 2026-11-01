@@ -9,4 +9,6 @@ object BuildConfig {
     const val VERSION_NAME = "2.5.6"
     const val VERSION_CODE = 191
     const val AUTHORITY = "me.rerere.rikkahub.fileprovider"
+    // Play 渠道禁用自更新等入口的开关，桌面端不走 Play 商店，恒为 false
+    const val IS_PLAY_STORE = false
 }

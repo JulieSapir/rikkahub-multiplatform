@@ -1,3 +1,4 @@
+import org.gradle.kotlin.dsl.support.serviceOf
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import org.gradle.api.tasks.testing.Test
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
@@ -5,7 +6,7 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 /**
  * Linux 桌面端。
  *
- * 这里不修改 app / ai / common / highlight 里的任何文件，而是把其中平台无关的 Kotlin 源码直接
+ * 这里不修改 app / ai / common 里的任何文件，而是把其中平台无关的 Kotlin 源码直接
  * 纳入本模块的编译单元（AGP 库无法被纯 JVM 模块依赖，所以只能重新编译一次源码）。上游文件因此
  * 保持逐字节不变，rebase 时不会产生冲突；只有下面 exclude 掉的、真正依赖 Android 框架的文件
  * 才在 src/platform/kotlin 里提供 JVM 版本。
@@ -31,13 +32,14 @@ kotlin {
             // gradle/source-compat.gradle.kts 重写出来的那几个文件
             srcDir(layout.buildDirectory.dir("generated/compat"))
             srcDir("src/platform/kotlin")
+            // bettertext（上游 Markdown/公式/代码高亮）只发 Android AAR，这里编它的 sources jar，见下方 unpackBettertextSources
+            srcDir(layout.buildDirectory.dir("bettertext/src"))
 
             // 平台无关的库模块：直接编译它们的源码（AGP 库不能被纯 JVM 模块依赖）。
             // srcDir 一律用模块根的 java 目录，这样下面的 exclude 模式带包路径，不会因为
             // 根目录不同而失效。
             srcDir("../common/src/main/java")
             srcDir("../ai/src/main/java")
-            srcDir("../highlight/src/main/java")
             srcDir("../material3/src/main/java")
             srcDir("../material3/material-color-utilities/kotlin")
             srcDir("../mediagen/src/main/java")
@@ -72,7 +74,6 @@ kotlin {
             exclude("**/common/android/ContextUtil.kt")
             exclude("**/utils/ContextUtil.kt")
             // 只给 Android Studio 预览用
-            exclude("**/highlight/HighlighterPreview.kt")
             // 云端 ASR 的 5 个 provider 与 hooks/ASR.kt 平台无关（okhttp websocket），原样编译：
             // 唯一的 Android 依赖 AudioRecord 由 android/media/AudioRecordJvm.kt 的 TargetDataLine 顶替
             // 系统 TTS 引擎是 Android 的 TextToSpeech，桌面端由 SystemTTSProviderJvm.kt 顶位；
@@ -112,12 +113,17 @@ kotlin {
             exclude("**/data/db/AppDatabaseFactory.kt")
             exclude("**/data/db/SQLiteConfiguration.kt")
             // 只有用了 Android SupportSQLiteDatabase 的手写迁移要换掉，
-            // Migration_8_9 / 16_17 / 22_23 是 AutoMigrationSpec 标记类，跨平台可用
+            // Migration_8_9 / 16_17 / 22_23 是 AutoMigrationSpec 标记类，跨平台可用；
+            // 27_28 / 30_31 是 SupportSQLiteDatabase 迁移，桌面端走破坏性迁移不需要；
+            // 28_29 是 AutoMigrationSpec（AppDatabase 声明里引用），由 main/kotlin 的 SQLiteConnection 版本顶位
             exclude("**/data/db/migrations/Migration_6_7.kt")
             exclude("**/data/db/migrations/Migration_11_12.kt")
             exclude("**/data/db/migrations/Migration_13_14.kt")
             exclude("**/data/db/migrations/Migration_14_15.kt")
             exclude("**/data/db/migrations/Migration_15_16.kt")
+            exclude("**/data/db/migrations/Migration_27_28.kt")
+            exclude("**/data/db/migrations/Migration_28_29.kt")
+            exclude("**/data/db/migrations/Migration_30_31.kt")
             exclude("**/data/db/migrations/MigrationUtils.kt")
             // fts 用 linux 侧的 JVM 版本（上游那份依赖 jieba 扩展与 openHelper）
             exclude("**/data/db/fts/MessageFtsManager.kt")
@@ -127,14 +133,20 @@ kotlin {
             exclude("**/ui/pages/webview/**")
             // 这些设置页绑的是 Android 能力：前台服务/通知/相册/剪贴板权限/TTS-ASR 播放
             exclude("**/ui/activity/**")
-            // 这两组组件绑的是 ChatService / 仓储 / Koin / navigation3 的 Screen，数据层接好后再放开
-            // 公式(jlatexmath-android)、mermaid(WebView)、图片缩放(image-viewer AAR)、HTML 渲染
-            // 都用了 Android 专属实现，桌面端由 richtext/RichtextJvm.kt 给出对应实现
-            exclude("**/ui/components/richtext/MathBlock.kt")
-            exclude("**/ui/components/richtext/LatexText.kt")
+            // mermaid(WebView) 与图片缩放(image-viewer AAR) 是 Android 专属实现，
+            // 桌面端由 richtext/MermaidJvm.kt、RichtextJvm.kt 顶位
             exclude("**/ui/components/richtext/Mermaid.kt")
-            exclude("**/ui/components/richtext/SimpleHtmlBlock.kt")
             exclude("**/ui/components/richtext/ZoomableAsyncImage.kt")
+            // bettertext：markdown / highlight / 公式排版是纯 Compose + Kotlin，原样编译（android.graphics 的
+            // Canvas/Paint/Path 由 src/platform 下的 Skia 实现顶替）。只有 text 模块里基于 StaticLayout 的排版与
+            // 选择，以及从 Android 资源取 KaTeX 字体这一处，换成 src/platform/kotlin/me/rerere/bettertext 下的 *Jvm.kt。
+            // 用文件级模式：exclude 也作用于 src/platform，目录级会误伤同包的替代文件
+            exclude("me/rerere/bettertext/text/BetterText.kt")
+            exclude("me/rerere/bettertext/text/SelectionContainer.kt")
+            exclude("me/rerere/bettertext/text/Selection.kt")
+            exclude("me/rerere/bettertext/text/Spans.kt")
+            exclude("me/rerere/bettertext/text/TextLayout.kt")
+            exclude("me/rerere/bettertext/latex/render/MathTypefaces.kt")
             // 这些组件用了 Android 权限/相册/播放器/FloatingX 等能力
             // 图片预览与离屏位图渲染绑 Android 视图树，桌面端由 *Jvm.kt 顶位
             exclude("**/ui/components/ui/ImagePreviewDialog.kt")
@@ -151,7 +163,9 @@ kotlin {
             // 生成循环 / 工具调用 / 备份同步都依赖 Android 侧的仓储与前台服务
             // 聊天编排（ChatService / ConversationSession / MessageQueue）是平台无关的，放开；
             // Android DocumentsProvider（工作区文件对外暴露）桌面端不需要，直接排除
+            // 上游把它挪到了 service/ 包，两个路径都排
             exclude("**/data/provider/WorkspaceDocumentsProvider.kt")
+            exclude("**/service/WorkspaceDocumentsProvider.kt")
             // 备份/导出与设备信息占位符依赖 Android 的 SQLite 与 FileProvider，用 JVM 版本替代
             exclude("**/data/sync/DatabaseBackup.kt")
             exclude("**/data/sync/BackupManager.kt")
@@ -159,10 +173,27 @@ kotlin {
             // 设备类本地工具（日历、屏幕时间）走 Android ContentProvider，桌面端没有对应能力
             exclude("**/data/ai/tools/local/CalendarTool.kt")
             exclude("**/data/ai/tools/local/ScreenTimeTool.kt")
+            // SSH 凭据加密用 Android Keystore，桌面端由 main/kotlin 同名实现换成落盘密钥的 AES/GCM
+            exclude("**/utils/SecretCipher.kt")
+            // 应用 logo 取 AdaptiveIconDrawable 两层再由 View 层画，桌面端由 main/kotlin 同名实现
+            // 用构建期合成的 ic_launcher 位图直接画（android-res 任务已按 adaptive-icon 合成）
+            exclude("**/ui/components/ui/AppLogo.kt")
             // 只有 Android 前台服务与通知壳用 JVM 版本替代
             exclude("**/service/ChatGenerationForegroundService.kt")
             exclude("**/service/MediaCreationForegroundService.kt")
             exclude("**/service/WebServerService.kt")
+            // Memory Dream（回忆整理）的前台服务壳，桌面端由 DesktopServiceRouter 直接跑协程
+            exclude("**/service/MemoryDreamForegroundService.kt")
+            // Android 悬浮窗气泡/面板（FloatingX + 前台服务保活），桌面端窗口由窗口系统管理；
+            // AppModule 里的 koin 单例由 main/kotlin 的 ChatFloatingWindowsJvm 空实现顶位
+            exclude("me/rerere/rikkahub/ui/floating/ChatFloatingWindows.kt")
+            exclude("me/rerere/rikkahub/ui/floating/ChatFloatingContent.kt")
+            // 相机扫码页绑 CameraX + 系统权限，桌面端由 main/kotlin 同名实现走 webcam-capture
+            exclude("**/ui/components/ui/QRCodeScanner.kt")
+            // 图片裁剪：对话框绑 DialogWindowProvider 系统窗口与 ui 模块资源，解码绑 ImageDecoder；
+            // ImageCropper / ImageCropState 是纯 Compose（systemGestureExclusion 由 shim 置空），保留
+            exclude("**/ui/crop/ImageCropDialog.kt")
+            exclude("**/ui/crop/ImageCropImage.kt")
             // OAuth：Custom Tabs 拉起浏览器与前台服务保活这两壳换成 *Jvm.kt 顶位
             exclude("**/OAuthAuthorizationLauncher.kt")
             exclude("**/OAuthCallbackForegroundService.kt")
@@ -204,6 +235,7 @@ tasks.withType<Test>().configureEach {
 
 sourceSets.named("main") {
     resources.srcDir(layout.buildDirectory.dir("generated/rikkaRes/resources"))
+    resources.srcDir(layout.buildDirectory.dir("bettertext/resources"))
     // 内嵌前端的产物（web-ui 构建后由 copy.ts 落到这里），Ktor 的 staticResources("/", "static") 就查这份
     resources.srcDir("../web/src/main/resources")
 }
@@ -217,7 +249,7 @@ ksp {
 // 生成的 R / 字符串表要先产出（KSP 也会读同一批源码）
 tasks.matching { it.name == "processResources" || it.name.startsWith("compileKotlin") || it.name.startsWith("ksp") }
     .configureEach {
-        dependsOn("generateRikkaRes", "rewriteCompatSources")
+        dependsOn("generateRikkaRes", "rewriteCompatSources", "unpackBettertextSources", "extractKatexFonts")
     }
 
 // hugeicons-compose 只发 Android AAR，纯 JVM 模块没法直接依赖，这里把它的 classes.jar 抽出来用。
@@ -266,6 +298,61 @@ val stripTermuxSession = tasks.register<Zip>("stripTermuxSession") {
     dependsOn(extractTermuxEmulator)
 }
 
+// bettertext（上游 Markdown / LaTeX / 代码高亮）只在 jitpack 上发 Android AAR。它的 markdown、highlight 与
+// 公式排版都是纯 Compose + Kotlin，所以和上游模块一样直接编源码：拉 sources jar 解到 build/bettertext/src，
+// 绑 Android 的 text 模块与公式取字体/画 Canvas 那几个文件在 kotlin 源集里 exclude，换成 src/platform 下的实现。
+// KaTeX 字体只在 latex 的 AAR 的 res/font 里，抽出来放进 resources。版本跟随 catalog 的 bettertext。
+val bettertextModules = listOf("text", "markdown", "latex", "highlight")
+
+val bettertextSources = configurations.create("bettertextSources") {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+    isTransitive = false
+}
+
+val bettertextAar = configurations.create("bettertextAar") {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+    isTransitive = false
+}
+
+val unpackBettertextSources = tasks.register<Sync>("unpackBettertextSources") {
+    group = "build"
+    description = "Unpack bettertext sources jars so the JVM module compiles them"
+    val archives = project.serviceOf<org.gradle.api.internal.file.FileOperations>()
+    from(bettertextSources.elements.map { jars -> jars.map { archives.zipTree(it) } }) {
+        include("**/*.kt")
+        // 桌面端 Compose 的 nativeCanvas 是 Skia Canvas，公式渲染器要的是 android.graphics.Canvas，
+        // 在调用处包一层（android/graphics/CanvasJvm.kt）。上游改了这两处时下面的检查会报错
+        filesMatching("me/rerere/bettertext/latex/Latex.kt") {
+            filter { line ->
+                if (line.startsWith("import ")) line
+                else line.replace(".nativeCanvas", ".let { c -> android.graphics.Canvas(c.nativeCanvas) }")
+            }
+        }
+    }
+    into(layout.buildDirectory.dir("bettertext/src"))
+    val latexFile = layout.buildDirectory.file("bettertext/src/me/rerere/bettertext/latex/Latex.kt")
+    doLast {
+        val count = latexFile.get().asFile.readText().split("android.graphics.Canvas(c.nativeCanvas)").size - 1
+        check(count == 2) {
+            "bettertext Latex.kt 里 nativeCanvas 的用法变了（$count 处），更新 linux/build.gradle.kts 的 unpackBettertextSources"
+        }
+    }
+}
+
+val extractKatexFonts = tasks.register<Sync>("extractKatexFonts") {
+    group = "build"
+    description = "Copy KaTeX fonts out of the bettertext latex AAR"
+    val archives = project.serviceOf<org.gradle.api.internal.file.FileOperations>()
+    from(bettertextAar.elements.map { aars -> aars.map { archives.zipTree(it) } }) {
+        include("res/font/*.ttf")
+        eachFile { path = "bettertext/fonts/$name" }
+    }
+    includeEmptyDirs = false
+    into(layout.buildDirectory.dir("bettertext/resources"))
+}
+
 val extractHugeicons = tasks.register<Copy>("extractHugeicons") {
     group = "build"
     description = "Unpack hugeicons-compose AAR classes.jar for the JVM module"
@@ -280,14 +367,17 @@ dependencies {
     hugeiconsAar("com.github.rikkahub:hugeicons-compose:${libs.versions.huge.icons.get()}")
     implementation(files(hugeiconsJar).builtBy(extractHugeicons))
 
+    val bettertextVersion = libs.versions.bettertext.get()
+    bettertextModules.forEach { bettertextSources("com.github.re-ovo.bettertext:$it:$bettertextVersion:sources") }
+    bettertextAar("com.github.re-ovo.bettertext:latex:$bettertextVersion@aar")
+    // bettertext/markdown 的 AST 解析库（KMP，有 jvm 产物），坐标与版本取自 bettertext v0.1.3 发布的 module 元数据；
+    // jsoup 也是它的依赖，下面已经声明
+    implementation("com.github.rikkahub:markdown:d79a97cc8e")
+
     termuxAar("com.termux.termux-app:terminal-emulator:${libs.versions.termux.get()}")
     implementation(files(layout.buildDirectory.file("termux/terminal-emulator-jvm.jar")).builtBy(stripTermuxSession))
     // JetBrains 的纯 JVM 伪终端库，工作区终端用它起 shell
     implementation("org.jetbrains.pty4j:pty4j:0.13.1")
-
-    // 上游 markdown 渲染用的 AST 库（KMP jar）与 toast 组件
-    implementation(libs.jetbrains.markdown)
-    implementation(libs.sonner)
 
     // foundation / ui / animation 由 desktop 运行时带进来，这里只声明直接用的
     implementation(compose.desktop.currentOs)
@@ -357,16 +447,14 @@ dependencies {
     implementation(libs.ktor.server.content.negotiation)
     implementation(libs.ktor.server.status.pages)
     implementation(libs.ktor.server.auth)
-    implementation(libs.ktor.server.auth.jwt)
     // Compose Multiplatform 自己的返回手势/按键处理，androidx.activity.compose.BackHandler 由它转接
     implementation("org.jetbrains.compose.ui:ui-backhandler:1.12.1")
-    // 上游 UI 用到的三个跨平台库：Haze 背景模糊、Lucide 图标、Paging 3 的 compose 绑定
+    // 上游 UI 用到的三个跨平台库：Haze 背景模糊、Paging 3 的 compose 绑定
     implementation(libs.haze)
     implementation(libs.haze.blur)
     implementation(libs.haze.blur.material3)
     implementation(libs.haze.glass)
     implementation(libs.haze.glass.material3)
-    implementation(libs.lucide.icons)
     implementation(libs.androidx.paging.compose)
     // RabbitLoadingIndicator 用的 MD3 表现型形状库
     implementation("androidx.graphics:graphics-shapes:1.1.0")
@@ -391,8 +479,6 @@ dependencies {
     implementation("io.github.dokar3:quickjs-kt-jvm:${libs.versions.quickjs.get()}")
     implementation(libs.diffutils)
 
-    // LaTeX 公式排版：jlatexmath 是纯 Java 的 AWT 渲染引擎，顶替 Android 端 jlatexmath-android
-    implementation("org.scilab.forge:jlatexmath:1.0.7")
     // 图片缩放：首选的 telephoto 只有 Android 产物（Maven Central 全系没有 jvm 变体），
     // 换 panpf zoomimage 的 coil3 版：KMP 发布，1.7.0 按 JetBrains Compose 1.12.0 编译，与本端 1.12.1 对齐
     implementation("io.github.panpf.zoomimage:zoomimage-compose-coil3:1.7.0")
@@ -404,6 +490,11 @@ dependencies {
     implementation("com.googlecode.soundlibs:mp3spi:1.9.5.4")
     // 全文搜索分词：与 Android 端 jieba 扩展同源的纯 Java 实现，中文按词切分后走 fts5 unicode61
     implementation("com.huaban:jieba-analysis:1.0.2")
+
+    // workspace 模块的 SSH 后端：jsch 是纯 JVM 的 SSH/SFTP 实现，bcprov 提供 Ed25519 等算法
+    // （与 Android 端同一套坐标，见 catalog 的 jsch / bouncycastle-bcprov）
+    implementation(libs.jsch)
+    implementation(libs.bouncycastle.bcprov)
 
     testImplementation(libs.junit)
 }

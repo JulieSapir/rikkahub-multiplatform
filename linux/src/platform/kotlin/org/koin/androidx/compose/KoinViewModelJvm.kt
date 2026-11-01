@@ -14,11 +14,12 @@ import org.koin.core.qualifier.Qualifier
 inline fun <reified T : ViewModel> koinViewModel(
     viewModelStoreOwner: Any? = null,
     qualifier: Qualifier? = null,
+    key: String? = null,
     noinline parameters: ParametersDefinition? = null,
 ): T {
     // 桌面端只有一个窗口，没有 Activity 级的 ViewModelStore；owner 参数只是形参，
-    // 作用域由 Koin 的 KMP 版按当前导航条目决定。
+    // 作用域由 Koin 的 KMP 版按当前导航条目决定。key 沿用上游语义（同一 owner 内区分实例）。
     @Suppress("UNUSED_EXPRESSION")
     viewModelStoreOwner
-    return org.koin.compose.viewmodel.koinViewModel<T>(qualifier = qualifier, parameters = parameters)
+    return org.koin.compose.viewmodel.koinViewModel<T>(qualifier = qualifier, key = key, parameters = parameters)
 }

@@ -87,6 +87,24 @@ class Matrix {
     fun setRotate(degrees: Float): Matrix = apply { transform.setToRotation(Math.toRadians(degrees.toDouble())) }
 
     fun setScale(scaleX: Float, scaleY: Float): Matrix = apply { transform.setToScale(scaleX.toDouble(), scaleY.toDouble()) }
+
+    fun reset() = transform.setToIdentity()
+
+    fun postTranslate(dx: Float, dy: Float): Matrix = apply {
+        transform.preConcatenate(java.awt.geom.AffineTransform.getTranslateInstance(dx.toDouble(), dy.toDouble()))
+    }
+
+    /** 给 Path.transform 用：AffineTransform 的 2x3 换成 Compose 的列主序 4x4 */
+    internal fun toComposeMatrix(): androidx.compose.ui.graphics.Matrix {
+        val m = androidx.compose.ui.graphics.Matrix()
+        m[0, 0] = transform.scaleX.toFloat()
+        m[0, 1] = transform.shearY.toFloat()
+        m[1, 0] = transform.shearX.toFloat()
+        m[1, 1] = transform.scaleY.toFloat()
+        m[3, 0] = transform.translateX.toFloat()
+        m[3, 1] = transform.translateY.toFloat()
+        return m
+    }
 }
 
 /** 按 Matrix 变换绘制源图：画布取变换后包围盒，负半轴部分平移回原点 */
