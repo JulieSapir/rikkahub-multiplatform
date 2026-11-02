@@ -8,6 +8,9 @@ import org.gradle.api.DefaultTask
 import org.gradle.kotlin.dsl.support.serviceOf
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import org.gradle.api.tasks.testing.Test
+import org.gradle.api.tasks.JavaExec
+import org.jetbrains.compose.desktop.application.tasks.AbstractCheckNativeDistributionRuntime
+import org.jetbrains.compose.desktop.application.tasks.AbstractJvmToolOperationTask
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 /**
@@ -569,6 +572,14 @@ dependencies {
     testImplementation(libs.junit)
 }
 
+// 标准 OpenJDK 的 X11InputMethod 不向 XIM 更新光标位置，Fcitx/IBus 的候选框会停在
+// 窗口左下角。JBR 的新 XIM 客户端会读取 Compose 的 InputMethodRequests.getTextLocation，
+// 并处理窗口移动与屏幕缩放。只切换桌面应用的运行/打包 JDK，不改变 Gradle 或 Kotlin 编译器。
+val desktopJavaLauncher = javaToolchains.launcherFor {
+    languageVersion.set(JavaLanguageVersion.of(21))
+    vendor.set(JvmVendorSpec.JETBRAINS)
+}
+
 compose.desktop {
     application {
         mainClass = "me.rerere.rikkahub.linux.MainKt"
@@ -582,6 +593,9 @@ compose.desktop {
         // 所以直接放在一定存在的 build/ 下（run 任务的工作目录就是本模块目录，build/ 已在 .gitignore 里）。
         // 注意：打包分发时这里不会展开 $HOME，若目标机器的 CWD 不可写，JVM 只会告警并照常启动。
         jvmArgs(
+            // JBR 的 XIMPreeditPosition 模式负责将候选框放在 Compose 光标下方。
+            "-Djb.awt.newXimClient.enabled=true",
+            "-Djb.awt.newXimClient.preferBelowTheSpot=true",
             "-Xmx512m",
             "-Xms32m",
             "-XX:+UseSerialGC",
@@ -602,5 +616,24 @@ compose.desktop {
             vendor = "rerere"
             modules("java.sql", "jdk.unsupported")
         }
+    }
+}
+
+// Compose 的 application.javaHome 只接受 String，直接在 DSL 里 get() 会让 test/help 也下载
+// 整个 JBR。等插件注册完桌面任务后，只为运行任务与打包工具指定 JBR。
+val desktopJavaHome = desktopJavaLauncher.map { it.metadata.installationPath.asFile.absolutePath }
+afterEvaluate {
+    tasks.withType<JavaExec>().configureEach {
+        if (name == "run" || name == "runRelease") {
+            javaLauncher.set(desktopJavaLauncher)
+            // Compose 默认显式指定 Gradle 自身的 java，需同步替换，避免与 javaLauncher 冲突。
+            executable(desktopJavaLauncher.get().executablePath.asFile)
+        }
+    }
+    tasks.withType<AbstractCheckNativeDistributionRuntime>().configureEach {
+        jdkHome.set(desktopJavaHome)
+    }
+    tasks.withType<AbstractJvmToolOperationTask>().configureEach {
+        javaHome.set(desktopJavaHome)
     }
 }
