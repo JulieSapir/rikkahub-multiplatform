@@ -4,8 +4,10 @@ import android.content.Context
 import android.util.Log
 import android.widget.Toast
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import me.rerere.common.android.appTempFolder
+import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.sync.BackupManager
 import me.rerere.rikkahub.data.sync.RestoreFailedException
@@ -16,6 +18,7 @@ import me.rerere.rikkahub.di.viewModelModule
 import me.rerere.rikkahub.utils.CrashHandler
 import me.rerere.rikkahub.utils.JsonInstant
 import me.rerere.rikkahub.web.WebServerManager
+import okhttp3.OkHttpClient
 import org.koin.core.Koin
 import org.koin.core.context.GlobalContext
 import org.koin.core.module.Module
@@ -48,6 +51,11 @@ object DesktopBootstrap {
     }
 
     fun afterKoin(context: Context) {
+        // TLS/证书初始化与窗口创建并行，避免首次 Compose 注入网络客户端时阻塞 AWT。
+        val appKoin = koin
+        appKoin.get<AppScope>().launch(Dispatchers.IO) {
+            appKoin.get<OkHttpClient>()
+        }
         runCatching { context.appTempFolder.listFiles()?.forEach { it.deleteRecursively() } }
             .onFailure { Log.w(TAG, "清理临时目录失败: ${it.message}") }
         runCatching {

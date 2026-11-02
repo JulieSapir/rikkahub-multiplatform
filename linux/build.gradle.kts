@@ -9,8 +9,10 @@ import org.gradle.kotlin.dsl.support.serviceOf
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import org.gradle.api.tasks.testing.Test
 import org.gradle.api.tasks.JavaExec
+import org.gradle.process.ExecOperations
 import org.jetbrains.compose.desktop.application.tasks.AbstractCheckNativeDistributionRuntime
 import org.jetbrains.compose.desktop.application.tasks.AbstractJvmToolOperationTask
+import org.jetbrains.compose.desktop.application.tasks.AbstractJLinkTask
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 /**
@@ -588,10 +590,6 @@ compose.desktop {
         // 堆只用几十 MB，但默认 MaxHeap 是物理内存的 1/4，G1 的 remembered set 按堆预留大小分配（单占 57MB），
         // 换 SerialGC 后这项几乎归零。
         //
-        // AppCDS（AutoCreateSharedArchive）实测把「进程起来→窗口可见」从 911ms 降到 306ms，
-        // RSS 再降到 243MB。归档必须落在可写目录，且 JVM 不会替你把中间目录建出来，
-        // 所以直接放在一定存在的 build/ 下（run 任务的工作目录就是本模块目录，build/ 已在 .gitignore 里）。
-        // 注意：打包分发时这里不会展开 $HOME，若目标机器的 CWD 不可写，JVM 只会告警并照常启动。
         jvmArgs(
             // JBR 的 XIMPreeditPosition 模式负责将候选框放在 Compose 光标下方。
             "-Djb.awt.newXimClient.enabled=true",
@@ -600,8 +598,6 @@ compose.desktop {
             "-Xms32m",
             "-XX:+UseSerialGC",
             "-XX:MaxMetaspaceSize=128m",
-            "-XX:+AutoCreateSharedArchive",
-            "-XX:SharedArchiveFile=build/rikka-linux.jsa",
             // JCEF 的原生窗口模式要从 AWT peer 拿 X11 窗口句柄
             "--add-opens", "java.desktop/sun.awt=ALL-UNNAMED",
             "--add-opens", "java.desktop/sun.awt.X11=ALL-UNNAMED",
@@ -614,6 +610,7 @@ compose.desktop {
             packageVersion = appVersionName.get()
             description = "RikkaHub on Linux"
             vendor = "rerere"
+            // Compose 默认保留桌面、日志和 EC 加密模块，再补数据库与原生库所需模块。
             modules("java.sql", "jdk.unsupported")
         }
     }
@@ -628,6 +625,30 @@ afterEvaluate {
             javaLauncher.set(desktopJavaLauncher)
             // Compose 默认显式指定 Gradle 自身的 java，需同步替换，避免与 javaLauncher 冲突。
             executable(desktopJavaLauncher.get().executablePath.asFile)
+            val cdsDir = layout.buildDirectory.dir("cds/$name")
+            doFirst {
+                val runTask = this as JavaExec
+                val directory = cdsDir.get().asFile.apply { mkdirs() }
+                val archive = directory.resolve("app.jsa")
+                val classpathStamp = directory.resolve("classpath.txt")
+                // AppCDS 绑定 JBR 和有序 classpath；编译或依赖更新后重建归档。
+                val stamp = buildString {
+                    val metadata = runTask.javaLauncher.get().metadata
+                    appendLine(metadata.installationPath.asFile.absolutePath)
+                    appendLine(metadata.javaRuntimeVersion)
+                    runTask.classpath.forEach { file ->
+                        appendLine("${file.absolutePath}:${file.length()}:${file.lastModified()}")
+                    }
+                }
+                if (!classpathStamp.isFile || classpathStamp.readText() != stamp) {
+                    check(!archive.exists() || archive.delete()) { "无法更新 AppCDS 归档: $archive" }
+                    classpathStamp.writeText(stamp)
+                }
+                runTask.jvmArgs(
+                    "-XX:+AutoCreateSharedArchive",
+                    "-XX:SharedArchiveFile=${archive.absolutePath}",
+                )
+            }
         }
     }
     tasks.withType<AbstractCheckNativeDistributionRuntime>().configureEach {
@@ -635,5 +656,27 @@ afterEvaluate {
     }
     tasks.withType<AbstractJvmToolOperationTask>().configureEach {
         javaHome.set(desktopJavaHome)
+    }
+    val execOperations = project.serviceOf<ExecOperations>()
+    tasks.withType<AbstractJLinkTask>().configureEach {
+        // 压缩运行时的类与资源；保留 java.desktop 中的 JBR XIM 修复及字体。
+        freeArgs.add("--compress=zip-9")
+        doLast {
+            val linkTask = this as AbstractJLinkTask
+            val runtime = linkTask.destinationDir.get().asFile
+            // jlink 裁剪后需为该模块镜像重新生成基础 CDS，不能复用完整 JBR 的归档。
+            val java = runtime.resolve("bin/java")
+            java.parentFile.mkdirs()
+            File(linkTask.javaHome.get(), "bin/java").copyTo(java)
+            check(java.setExecutable(true))
+            try {
+                execOperations.exec {
+                    commandLine(java, "-Xms32m", "-Xmx512m", "-XX:+UseSerialGC", "-Xshare:dump")
+                }
+            } finally {
+                java.delete()
+                java.parentFile.delete()
+            }
+        }
     }
 }
