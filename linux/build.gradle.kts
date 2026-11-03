@@ -134,6 +134,7 @@ kotlin {
             exclude("me/rerere/rikkahub/ui/pages/extensions/workspace/WorkspaceDetailPage.kt")
             exclude("me/rerere/rikkahub/ui/theme/ChatFont.kt")
             exclude("me/rerere/rikkahub/ui/pages/translator/TranslatorPage.kt")
+            exclude("me/rerere/rikkahub/ui/pages/setting/SettingAboutPage.kt")
             exclude("me/rerere/rikkahub/RouteActivity.kt")
             // 终端：Android 那份用 proot + rootfs + Termux 的 View，桌面端由 *Jvm.kt 起本地 shell
             exclude("**/ui/pages/extensions/workspace/WorkspaceTerminalSession.kt")

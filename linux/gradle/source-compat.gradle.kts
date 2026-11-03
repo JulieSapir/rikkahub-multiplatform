@@ -171,7 +171,17 @@ val emojiBurstRules: List<String> = listOf(
         "                }\n"
 }
 
-val compatRules: List<String> = contextBuilderRules + assetIconRules + fontLoaderRules + clipboardRules + routeActivityRules + receiveContentRules + emojiBurstRules + listOf(
+val aboutPageRules: List<String> = listOf(
+    "me/rerere/rikkahub/ui/pages/setting|SettingAboutPage.kt",
+).map { spec ->
+    "$spec|" +
+        "关于页显示桌面图标、Linux 发行版、架构、内核与 Java 运行时版本|" +
+        "SmartPhone01\u0001Computer" +
+        "\u0002/ Android \${android.os.Build.VERSION.RELEASE} / SDK \${android.os.Build.VERSION.SDK_INT}" +
+        "\u0001/ Linux \${android.os.Build.VERSION.RELEASE} / Java \${System.getProperty(\"java.runtime.version\")}"
+}
+
+val compatRules: List<String> = contextBuilderRules + assetIconRules + fontLoaderRules + clipboardRules + routeActivityRules + receiveContentRules + emojiBurstRules + aboutPageRules + listOf(
     "me/rerere/rikkahub/ui/components/ui|ErrorCard.kt|" +
         "Android 的 ClipEntry(clipData = ...) 具名参数在 JB 端是 nativeClipEntry，位置传参即可|" +
         "clipData =\u0001",
