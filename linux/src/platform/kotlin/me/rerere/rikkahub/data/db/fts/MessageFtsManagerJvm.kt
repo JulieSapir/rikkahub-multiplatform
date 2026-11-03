@@ -1,16 +1,16 @@
 package me.rerere.rikkahub.data.db.fts
 
 import android.content.Context
-import androidx.sqlite.SQLiteConnection
+import androidx.room.PooledConnection
+import androidx.room.Transactor
+import androidx.room.immediateTransaction
 import androidx.sqlite.SQLiteStatement
-import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import com.huaban.analysis.jieba.JiebaSegmenter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.db.AppDatabase
-import me.rerere.rikkahub.data.db.AppDatabaseFactory
 import me.rerere.rikkahub.data.model.Conversation
 import java.io.File
 import java.time.Instant
@@ -52,45 +52,44 @@ class MessageFtsManager(private val database: AppDatabase) {
             .trim()
     }
 
-    private suspend fun <R> withConnection(block: (SQLiteConnection) -> R): R =
-        withContext(Dispatchers.IO) {
-            val path = requireNotNull(AppDatabaseFactory.databasePath) {
-                "还没建过数据库，全文搜索不可用"
-            }
-            BundledSQLiteDriver().open(path).use { connection -> block(connection) }
-        }
+    private suspend fun <R> withConnection(
+        isReadOnly: Boolean = false,
+        block: suspend (Transactor) -> R,
+    ): R = withContext(Dispatchers.IO) {
+        // 索引与会话 DAO 共用 Room 连接池，写操作在同一条写连接上排队。
+        database.useConnection(isReadOnly, block)
+    }
 
-    suspend fun indexConversation(conversation: Conversation) = withConnection { db ->
-        val conversationId = conversation.id.toString()
-        // 先删后插必须是一个事务，中断在中间会让这条会话在全文索引里只剩一半
-        db.exec("BEGIN IMMEDIATE")
-        try {
-            db.exec("DELETE FROM message_fts WHERE conversation_id = ?") { bindText(1, conversationId) }
+    suspend fun indexConversation(conversation: Conversation) = withContext(Dispatchers.IO) {
+        // 分词与词典初始化放在事务外，缩短占用数据库写锁的时间。
+        val messages = buildList {
             conversation.messageNodes.forEach { node ->
                 node.messages.forEach { message ->
-                    // 存进去的是分词后的文本，snippet 因此也会带分词空格（可接受的代价）
                     val text = tokenize(message.extractFtsText())
-                    if (text.isNotBlank()) {
-                        db.exec(
-                            """
-                            INSERT INTO message_fts(text, node_id, message_id, conversation_id, title, update_at)
-                            VALUES (?, ?, ?, ?, ?, ?)
-                            """.trimIndent(),
-                        ) {
-                            bindText(1, text)
-                            bindText(2, node.id.toString())
-                            bindText(3, message.id.toString())
-                            bindText(4, conversationId)
-                            bindText(5, conversation.title)
-                            bindText(6, conversation.updateAt.toEpochMilli().toString())
-                        }
+                    if (text.isNotBlank()) add(Triple(node.id.toString(), message.id.toString(), text))
+                }
+            }
+        }
+        val conversationId = conversation.id.toString()
+        withConnection { db ->
+            db.immediateTransaction {
+                exec("DELETE FROM message_fts WHERE conversation_id = ?") { bindText(1, conversationId) }
+                messages.forEach { (nodeId, messageId, text) ->
+                    exec(
+                        """
+                        INSERT INTO message_fts(text, node_id, message_id, conversation_id, title, update_at)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                        """.trimIndent(),
+                    ) {
+                        bindText(1, text)
+                        bindText(2, nodeId)
+                        bindText(3, messageId)
+                        bindText(4, conversationId)
+                        bindText(5, conversation.title)
+                        bindText(6, conversation.updateAt.toEpochMilli().toString())
                     }
                 }
             }
-            db.exec("COMMIT")
-        } catch (t: Throwable) {
-            runCatching { db.exec("ROLLBACK") }
-            throw t
         }
     }
 
@@ -107,7 +106,7 @@ class MessageFtsManager(private val database: AppDatabase) {
         sort: MessageSearchSort = MessageSearchSort.RELEVANCE,
         // 只搜这些助手的对话，null 表示不限（与上游新版签名一致）
         assistantIds: Collection<String>? = null,
-    ): List<MessageSearchResult> = withConnection { db ->
+    ): List<MessageSearchResult> = withConnection(isReadOnly = true) { db ->
         val assistantFilter = if (assistantIds != null) {
             val placeholders = assistantIds.joinToString(", ") { "?" }
             """
@@ -139,7 +138,7 @@ class MessageFtsManager(private val database: AppDatabase) {
             .filter { token -> token.any { it.isLetterOrDigit() } }
             .joinToString(" OR ") { "\"" + it.replace("\"", " ") + "\"" }
             .ifEmpty { "\"" + keyword.replace("\"", " ") + "\"" }
-        db.prepare(sql).use { statement ->
+        db.usePrepared(sql) { statement ->
             statement.bindText(1, match)
             assistantIds?.forEachIndexed { index, id -> statement.bindText(index + 2, id) }
             while (statement.step()) {
@@ -164,9 +163,9 @@ object SimpleDictManager {
     fun extractDict(context: Context): File = File(context.cacheDir, "jieba_dict").apply { mkdirs() }
 }
 
-/** SQLiteConnection 只提供 prepare，这里补一个“执行不取结果”的辅助函数 */
-private inline fun SQLiteConnection.exec(sql: String, bind: SQLiteStatement.() -> Unit = {}) {
-    prepare(sql).use { statement ->
+/** 在 Room 管理的连接上执行不返回结果的 SQL。 */
+private suspend fun PooledConnection.exec(sql: String, bind: SQLiteStatement.() -> Unit = {}) {
+    usePrepared(sql) { statement ->
         statement.bind()
         statement.step()
     }

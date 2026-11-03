@@ -21,7 +21,7 @@ import java.io.File
 internal object AppDatabaseFactory {
     const val DATABASE_NAME = "database"
 
-    /** 全文搜索要自己开一条连接跑 fts5 语句，这里记下建库用的文件路径 */
+    /** 备份快照需要数据库文件路径。 */
     var databasePath: String? = null
         private set
 
