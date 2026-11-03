@@ -14,8 +14,7 @@ import org.gradle.api.tasks.TaskAction
  * 少数上游文件用到了 Android 版 Compose 特有的 API 形状（具名参数 `clipData =`、
  * `decorFitsSystemWindows =` 这类 JB 端没有的成员），整个换掉会有冲突
  *
- * 处理方式：重写一份到 build/generated/compat 下参与编译，原文件在 linux/build.gradle.kts
- * 里 exclude
+ * 处理方式：由同一份登记派生源文件排除清单与生成输入，改写到 build/generated/compat 参与编译。
  *
  * 规则用竖线分隔的字符串编码，避免嵌套 data class 在配置缓存里无法序列化：
  * `包路径|文件名|说明|查找\u0001替换(\u0002查找\u0001替换)*`
@@ -57,9 +56,13 @@ abstract class RewriteCompatSourcesTask : DefaultTask() {
             val (packagePath, fileName) = target
             val notes = plan.notes
             val replacements = plan.replacements
-            val source = sources.firstOrNull {
-                it.name == fileName && it.absolutePath.replace('\\', '/').contains(packagePath)
-            } ?: throw IllegalStateException("compat 规则没找到源文件: $packagePath/$fileName")
+            val candidates = sources.filter {
+                it.absolutePath.replace('\\', '/').endsWith("/$packagePath/$fileName")
+            }
+            check(candidates.size == 1) {
+                "compat 源文件必须唯一: $packagePath/$fileName，找到 ${candidates.size} 个"
+            }
+            val source = candidates.single()
 
             var text = source.readText(Charsets.UTF_8)
             replacements.forEach { (find, replace) ->
@@ -73,7 +76,7 @@ abstract class RewriteCompatSourcesTask : DefaultTask() {
             // 上游源码都是 UTF-8，写出时显式指定，JDK17 的 C locale 默认字符集不是它
             target.writeText(
                 buildString {
-                    appendLine("// 由 linux/gradle/source-compat.gradle.kts 从 ${relativeNameOf(source)} 生成，请勿手改")
+                    appendLine("// 由 linux/gradle/source-compat.gradle.kts 从 ${packagePath}/${fileName} 生成，请勿手改")
                     notes.forEach { appendLine("// $it") }
                     appendLine()
                     append(text)
@@ -84,8 +87,6 @@ abstract class RewriteCompatSourcesTask : DefaultTask() {
         }
     }
 
-    private fun relativeNameOf(file: java.io.File): String =
-        runCatching { project.rootDir.toPath().relativize(file.toPath()).toString() }.getOrDefault(file.name)
 }
 
 /**
@@ -181,7 +182,65 @@ val aboutPageRules: List<String> = listOf(
         "\u0001/ Linux \${android.os.Build.VERSION.RELEASE} / Java \${System.getProperty(\"java.runtime.version\")}"
 }
 
-val compatRules: List<String> = contextBuilderRules + assetIconRules + fontLoaderRules + clipboardRules + routeActivityRules + receiveContentRules + emojiBurstRules + aboutPageRules + listOf(
+// Retain upstream migration bodies; adapt only Room's connection callback type.
+val migrationRules = listOf("6_7", "11_12", "13_14", "14_15", "15_16", "27_28", "30_31").map { version ->
+    "me/rerere/rikkahub/data/db/migrations|Migration_$version.kt|Room JVM migration callback|" +
+        "override fun migrate(db: SupportSQLiteDatabase) {\u0001" +
+        "override fun migrate(connection: androidx.sqlite.SQLiteConnection) {\n" +
+        "        val db = SupportSQLiteDatabase(connection)"
+} + listOf(
+    "me/rerere/rikkahub/data/db/migrations|Migration_28_29.kt|Room JVM auto-migration callback|" +
+        "override fun onPostMigrate(db: SupportSQLiteDatabase) {\u0001" +
+        "override fun onPostMigrate(connection: androidx.sqlite.SQLiteConnection) {\n" +
+        "        val db = SupportSQLiteDatabase(connection)",
+)
+
+val databaseFactoryRules = listOf(
+    "me/rerere/rikkahub/data/db|AppDatabaseFactory.kt|Upstream migrations and callbacks on the desktop driver|" +
+        "import androidx.room.Room\n\u0001import androidx.room.Room\nimport androidx.room.databaseBuilder\n" +
+        "\u0002internal object AppDatabaseFactory {\u0001internal object AppDatabaseFactory {\n" +
+        "    fun createForRestore(path: String): AppDatabase = builder(path)\n\n" +
+        "\u0002fun create(context: Context, name: String = SQLiteConfiguration.DATABASE_NAME): AppDatabase =\n" +
+        "        Room.databaseBuilder(context, AppDatabase::class.java, name)\u0001" +
+        "fun create(context: Context, name: String = SQLiteConfiguration.DATABASE_NAME): AppDatabase {\n" +
+        "        val file = context.getDatabasePath(name).apply { parentFile?.mkdirs() }\n" +
+        "        return builder(file.absolutePath)\n    }\n\n" +
+        "    private fun builder(path: String): AppDatabase =\n" +
+        "        Room.databaseBuilder(AppDatabase::class.java, path)" +
+        "\u0002override fun onOpen(db: SupportSQLiteDatabase) {\u0001" +
+        "override fun onOpen(connection: androidx.sqlite.SQLiteConnection) {\n" +
+        "                    val db = SupportSQLiteDatabase(connection)\n" +
+        "                    migrateDesktopFts(db)" +
+        "\u0002                    // 旧版本搜索用 jieba 分词，会把词典解压到这里（约 14MB），现在不再需要\n" +
+        "                    File(context.filesDir, \"simple_dict\").takeIf { it.exists() }?.deleteRecursively()\n\u0001" +
+        "\u0002.openHelperFactory(SQLiteConfiguration.openHelperFactory(context))\u0001.setDriver(DesktopSQLiteDriver.create())",
+)
+
+val ftsRules = listOf(
+    "me/rerere/rikkahub/data/db/fts|MessageFtsManager.kt|Run upstream FTS on Room JVM connections|" +
+        "    private val db get() = database.openHelper.writableDatabase\u0001" +
+        "\u0002database.withTransaction {\u0001database.withFtsWriter { db ->" +
+        "\u0002= withContext(Dispatchers.IO) {\u0001= database.withFtsReader { db ->" +
+        "\u0002return@withContext\u0001return@withFtsReader" +
+        "\u0002buildFtsMatchQuery(keyword, ::simpleQuery)\u0001buildFtsMatchQuery(keyword) { simpleQuery(db, it) }" +
+        "\u0002private fun simpleQuery(text: String)\u0001private suspend fun simpleQuery(db: DesktopFtsDatabase, text: String)" +
+        "\u0002internal fun buildFtsMatchQuery(keyword: String, asciiQuery: (String) -> String)\u0001" +
+        "internal suspend fun buildFtsMatchQuery(keyword: String, asciiQuery: suspend (String) -> String)" +
+        "\u0002QUERY_RUN.findAll(keyword).mapNotNull\u0001QUERY_RUN.findAll(keyword).toList().mapNotNull" +
+        "\u0002private fun UIMessage.extractFtsText()\u0001internal fun UIMessage.extractFtsText()",
+)
+
+val backupRules = listOf(
+    "me/rerere/rikkahub/data/sync|BackupManager.kt|Upstream archive format and restore lifecycle on Room JVM|" +
+        "DatabaseBackup.createSnapshot(database.openHelper.writableDatabase, snapshot)\u0001" +
+        "DatabaseBackup.createSnapshot(database, snapshot)" +
+        "\u0002DatabaseBackup.normalize(context, stagedDatabase)\u0001DatabaseBackup.normalize(stagedDatabase)" +
+        "\u0002AppDatabaseFactory.create(context, stagedDatabase.absolutePath)\u0001" +
+        "AppDatabaseFactory.createForRestore(stagedDatabase.absolutePath)" +
+        "\u0002DatabaseBackup.checkpoint(room.openHelper.writableDatabase)\u0001DatabaseBackup.checkpoint(room)",
+)
+
+val compatRules: List<String> = migrationRules + databaseFactoryRules + ftsRules + backupRules + contextBuilderRules + assetIconRules + fontLoaderRules + clipboardRules + routeActivityRules + receiveContentRules + emojiBurstRules + aboutPageRules + listOf(
     "me/rerere/rikkahub/ui/components/ui|ErrorCard.kt|" +
         "Android 的 ClipEntry(clipData = ...) 具名参数在 JB 端是 nativeClipEntry，位置传参即可|" +
         "clipData =\u0001",
@@ -190,16 +249,22 @@ val compatRules: List<String> = contextBuilderRules + assetIconRules + fontLoade
         ", decorFitsSystemWindows = false\u0001",
 )
 
+// 同一文件可登记多个改写点；原文件只排除一次，输入也只登记一次。
+val compatSourcePaths = compatRules.map { spec ->
+    val parts = spec.split("|", limit = 4)
+    require(parts.size == 4) { "Invalid compat rule: $spec" }
+    "${parts[0]}/${parts[1]}"
+}.distinct()
+extra["compatSourcePaths"] = compatSourcePaths
+
+val compatSourceFiles = compatSourcePaths.map { path ->
+    val candidates = listOf("app", "ui").map { project.file("../$it/src/main/java/$path") }.filter { it.isFile }
+    require(candidates.size == 1) { "compat 源文件必须唯一: $path，找到 ${candidates.size} 个" }
+    candidates.single()
+}
+
 tasks.register("rewriteCompatSources", RewriteCompatSourcesTask::class.java) {
     rules.set(compatRules)
-    sourceFiles.from(
-        compatRules.map { spec ->
-            val parts = spec.split("|")
-            // 上游 UI 组件不只在 app 模块里（easter egg 在 ui 模块），按源码根找第一个存在的
-            listOf("app", "ui").map { project.rootProject.file("$it/src/main/java/${parts[0]}/${parts[1]}") }
-                .firstOrNull { it.isFile }
-                ?: project.rootProject.file("app/src/main/java/${parts[0]}/${parts[1]}")
-        },
-    )
+    sourceFiles.from(compatSourceFiles)
     outputDir.set(project.layout.buildDirectory.dir("generated/compat"))
 }

@@ -34,7 +34,7 @@ plugins {
 
 // 版本号以 app/build.gradle.kts 的 defaultConfig 为准。:app 不在这个构建里，拿不到 AGP 的 android 扩展，
 // 所以直接从脚本文本里读那两行；读不到就让构建失败，而不是悄悄沿用旧值
-val appBuildScript = providers.fileContents(rootProject.layout.projectDirectory.file("app/build.gradle.kts")).asText
+val appBuildScript = providers.fileContents(layout.projectDirectory.file("../app/build.gradle.kts")).asText
 
 fun appDefaultConfig(key: String, pattern: String): Provider<String> = appBuildScript.map { text ->
     Regex("""\b$key\s*=\s*$pattern""").find(text)?.groupValues?.get(1)
@@ -90,6 +90,7 @@ val generateBuildConfig = tasks.register<GenerateBuildConfigTask>("generateBuild
 apply(from = "gradle/android-res.gradle.kts")
 // 少数上游文件用了 Android 版 Compose 特有的 API 形状，重写一份参与编译（原文件在下面 exclude）
 apply(from = "gradle/source-compat.gradle.kts")
+apply(from = "gradle/sqlite.gradle.kts")
 
 kotlin {
     sourceSets.named("main") {
@@ -125,17 +126,9 @@ kotlin {
             srcDir("../app/src/main/java")
 
             // ---- 排除：依赖 Android 框架或本端不启用的功能 ----
-            // 这几个只是 API 形状不同（具名参数、Coil 的 Context 参数），
-            // 由 rewriteCompatSources 生成桌面可用版本，规则见 gradle/source-compat.gradle.kts
-            exclude("me/rerere/rikkahub/ui/components/ui/ErrorCard.kt")
-            exclude("me/rerere/rikkahub/ui/components/ai/ChatInput.kt")
-            exclude("me/rerere/rikkahub/ui/components/ui/AIIcon.kt")
-            exclude("me/rerere/rikkahub/ui/pages/chat/ConversationExport.kt")
-            exclude("me/rerere/rikkahub/ui/pages/extensions/workspace/WorkspaceDetailPage.kt")
-            exclude("me/rerere/rikkahub/ui/theme/ChatFont.kt")
-            exclude("me/rerere/rikkahub/ui/pages/translator/TranslatorPage.kt")
-            exclude("me/rerere/rikkahub/ui/pages/setting/SettingAboutPage.kt")
-            exclude("me/rerere/rikkahub/RouteActivity.kt")
+            // 改写规则、源文件输入与排除项统一登记；真实的平台替身在下面单独列出。
+            @Suppress("UNCHECKED_CAST")
+            exclude(project.extra["compatSourcePaths"] as List<String>)
             // 终端：Android 那份用 proot + rootfs + Termux 的 View，桌面端由 *Jvm.kt 起本地 shell
             exclude("**/ui/pages/extensions/workspace/WorkspaceTerminalSession.kt")
             exclude("**/ui/pages/extensions/workspace/WorkspaceTerminalPage.kt")
@@ -161,41 +154,13 @@ kotlin {
             // WebView 控件是 Android 的，桌面端由 webview/WebViewJvm.kt（KCEF）顶位；
             // WebViewLocalAssets / WebViewContentCache 只用 Context、Uri 与 WebResourceResponse，原样编译
             exclude("**/ui/webview/WebView.kt")
-            // 关于页彩蛋的粒子循环原本没有粒子时也每帧 withFrameNanos，会让静止页面一直重绘；
-            // 由 source-compat 规则改成跑完就退出
-            exclude("**/ui/easteregg/EmojiBurst.kt")
             // Android 系统能力：图片处理、SAF、更新检查、崩溃上报、音效播放
             // 通知走 androidx/core/app/NotificationCompatJvm.kt 的托盘壳，上游 NotificationUtil 原样编译
             exclude("**/utils/CrashHandler.kt")
             exclude("**/utils/SoundEffectPlayer.kt")
             exclude("**/utils/DatabaseUtil.kt")
-            // 图表组件用了 ui 模块自己的 Android 资源
-            // 整个 app 的界面与数据层还没接完，先只放开表现层
-            // ---- Room 数据层（下一轮的入口，已验证过的门槛）----
-            // KSP 会重新 glob 源码目录、不认这里的 exclude，所以 data/db 只能整目录开关。
-            // 已跑通：room-runtime / room-paging / paging-common 都有 jvm 变体；配上
-            //   ksp { arg("room.schemaLocation", "app/schemas") } 与一个
-            //   androidx.sqlite.db.SupportSQLiteQuery 替身后，Room 能生成 DAO_Impl。
-            // 还差：migrations / fts / AppDatabaseFactory / SQLiteConfiguration 用的是 Android 的
-            //   SupportSQLiteDatabase API，data/files 整层是 SAF/MediaStore —— 都要写 JVM 版。
-            // 建库/迁移/FTS 用 linux 侧的 JVM 版本（上游那份绑 requery 与 SupportSQLiteDatabase）
-            exclude("**/data/db/AppDatabaseFactory.kt")
+            // Room schema、迁移与 FTS 主体复用上游；仅驱动配置使用桌面实现。
             exclude("**/data/db/SQLiteConfiguration.kt")
-            // 只有用了 Android SupportSQLiteDatabase 的手写迁移要换掉，
-            // Migration_8_9 / 16_17 / 22_23 是 AutoMigrationSpec 标记类，跨平台可用；
-            // 27_28 / 30_31 是 SupportSQLiteDatabase 迁移，桌面端走破坏性迁移不需要；
-            // 28_29 是 AutoMigrationSpec（AppDatabase 声明里引用），由 main/kotlin 的 SQLiteConnection 版本顶位
-            exclude("**/data/db/migrations/Migration_6_7.kt")
-            exclude("**/data/db/migrations/Migration_11_12.kt")
-            exclude("**/data/db/migrations/Migration_13_14.kt")
-            exclude("**/data/db/migrations/Migration_14_15.kt")
-            exclude("**/data/db/migrations/Migration_15_16.kt")
-            exclude("**/data/db/migrations/Migration_27_28.kt")
-            exclude("**/data/db/migrations/Migration_28_29.kt")
-            exclude("**/data/db/migrations/Migration_30_31.kt")
-            exclude("**/data/db/migrations/MigrationUtils.kt")
-            // fts 用 linux 侧的 JVM 版本（上游那份依赖 jieba 扩展与 openHelper）
-            exclude("**/data/db/fts/MessageFtsManager.kt")
             exclude("**/data/db/fts/SimpleDictManager.kt")
             // ImageUtils 用 linux 侧的 JVM 版本（原文件绑 exifinterface/zxing 的 Android 解码）
             exclude("**/utils/ImageUtils.kt")
@@ -236,7 +201,6 @@ kotlin {
             exclude("**/service/WorkspaceDocumentsProvider.kt")
             // 备份/导出与设备信息占位符依赖 Android 的 SQLite 与 FileProvider，用 JVM 版本替代
             exclude("**/data/sync/DatabaseBackup.kt")
-            exclude("**/data/sync/BackupManager.kt")
             exclude("**/data/export/ExportHooks.kt")
             // 设备类本地工具（日历、屏幕时间）走 Android ContentProvider，桌面端没有对应能力
             exclude("**/data/ai/tools/local/CalendarTool.kt")
@@ -296,6 +260,15 @@ kotlin {
     }
 }
 
+kotlin.sourceSets.named("test") {
+    kotlin.srcDirs(
+        "../ai/src/test/java/me/rerere/ai/agent",
+        "../app/src/test/java/me/rerere/rikkahub/service",
+        "../app/src/test/java/me/rerere/rikkahub/data/sync",
+        "../app/src/test/java/me/rerere/rikkahub/data/db/migrations",
+    )
+}
+
 tasks.withType<Test>().configureEach {
     // 测试里会构造 AppScope(Dispatchers.Main=Swing EDT)，没有显示器时必须走 headless AWT
     systemProperty("java.awt.headless", "true")
@@ -303,6 +276,7 @@ tasks.withType<Test>().configureEach {
 
 sourceSets.named("main") {
     resources.srcDir(layout.buildDirectory.dir("generated/rikkaRes/resources"))
+    resources.srcDir(layout.buildDirectory.dir("generated/sqlite"))
     resources.srcDir(layout.buildDirectory.dir("bettertext/resources"))
     // 内嵌前端的产物（web-ui 构建后由 copy.ts 落到这里），Ktor 的 staticResources("/", "static") 就查这份
     resources.srcDir("../web/src/main/resources")
@@ -310,16 +284,24 @@ sourceSets.named("main") {
 
 // 窗口与安装包共用仓库里的桌面图标，避免回退到 JDK 默认图标。
 tasks.named<ProcessResources>("processResources") {
-    from(rootProject.layout.projectDirectory.file("docs/icon.png")) {
+    from(layout.projectDirectory.file("../docs/icon.png")) {
         into("icons")
         rename { "rikkahub.png" }
     }
 }
 
-// Room 的 schema 直接复用 app 模块导出的那一份，AutoMigration 才能读到历史版本
+// 历史 schema 作为只读输入复制到构建目录，Linux KSP 不写回 Android 源码树。
+val prepareRoomSchemas = tasks.register<Copy>("prepareRoomSchemas") {
+    from("../app/schemas")
+    into(layout.buildDirectory.dir("roomSchemas"))
+}
 ksp {
-    arg("room.schemaLocation", "${rootProject.projectDir}/app/schemas")
+    arg("room.schemaLocation", layout.buildDirectory.dir("roomSchemas").get().asFile.absolutePath)
     arg("room.generateKotlin", "true")
+}
+
+tasks.matching { it.name.startsWith("ksp") }.configureEach {
+    dependsOn(prepareRoomSchemas)
 }
 
 // 生成的 R / 字符串表要先产出（KSP 也会读同一批源码）
@@ -573,8 +555,6 @@ dependencies {
     implementation("com.github.sarxos:webcam-capture:0.3.12")
     // 音效播放：mp3spi 是 JavaSound 的 MP3 解码 SPI，注册后 AudioSystem 能直接解上游 raw 里的 mp3
     implementation("com.googlecode.soundlibs:mp3spi:1.9.5.4")
-    // 全文搜索分词：与 Android 端 jieba 扩展同源的纯 Java 实现，中文按词切分后走 fts5 unicode61
-    implementation("com.huaban:jieba-analysis:1.0.2")
 
     // workspace 模块的 SSH 后端：jsch 是纯 JVM 的 SSH/SFTP 实现，bcprov 提供 Ed25519 等算法
     // （与 Android 端同一套坐标，见 catalog 的 jsch / bouncycastle-bcprov）
@@ -582,6 +562,7 @@ dependencies {
     implementation(libs.bouncycastle.bcprov)
 
     testImplementation(libs.junit)
+    testImplementation(libs.kotlinx.coroutines.test)
 }
 
 // 标准 OpenJDK 的 X11InputMethod 不向 XIM 更新光标位置，Fcitx/IBus 的候选框会停在
@@ -623,7 +604,7 @@ compose.desktop {
             // Compose 默认保留桌面、日志和 EC 加密模块，再补数据库与原生库所需模块。
             modules("java.sql", "jdk.unsupported")
             linux {
-                iconFile.set(rootProject.layout.projectDirectory.file("docs/icon.png"))
+                iconFile.set(layout.projectDirectory.file("../docs/icon.png"))
             }
         }
     }

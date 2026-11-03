@@ -21,11 +21,6 @@ pluginManagement {
         }
     }
 }
-plugins {
-    // Linux 桌面运行时使用带 XIM 光标定位修复的 JBR；缺失时由 Gradle 自动下载。
-    id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0"
-}
-
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
@@ -37,4 +32,17 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "rikkahub"
-include(":linux")
+include(":app")
+include(":ai")
+include(":search")
+include(":speech")
+include(":common")
+include(":document")
+include(":web")
+include(":material3")
+include(":ui")
+include(":workspace")
+include(":terminal")
+include(":app:baselineprofile")
+include(":mediagen")
+include(":oauth")

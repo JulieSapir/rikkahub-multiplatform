@@ -376,7 +376,7 @@ val generateRikkaRes = tasks.register("generateRikkaRes", GenerateRikkaResTask::
         "oauth/src/main/res" to "me.rerere.oauth|oauth",
         "ui/src/main/res" to "me.rerere.ui|ui",
     )
-    modules.set(resModules.map { (dir, rest) -> "${rootProject.file(dir)}|$rest" })
-    resDirs.from(resModules.map { (dir, _) -> rootProject.file(dir) })
+    modules.set(resModules.map { (dir, rest) -> "${project.file("../$dir")}|$rest" })
+    resDirs.from(resModules.map { (dir, _) -> project.file("../$dir") })
     outputDir.set(layout.buildDirectory.dir("generated/rikkaRes"))
 }

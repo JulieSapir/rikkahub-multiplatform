@@ -18,6 +18,7 @@ import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.MessageNode
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -31,19 +32,20 @@ class MessageFtsManagerTest {
     @get:Rule
     val temporaryFolder = TemporaryFolder()
 
+    private lateinit var context: Application
     private lateinit var database: AppDatabase
     private lateinit var manager: MessageFtsManager
 
     @Before
     fun setUp(): Unit = runBlocking {
-        val context = Application(
+        context = Application(
             File(temporaryFolder.root, "data"),
             File(temporaryFolder.root, "cache"),
         )
         database = AppDatabaseFactory.create(context)
         manager = MessageFtsManager(database)
         database.conversationDao().countAll()
-        // 先加载词典，让并发测试直接覆盖连接竞争。
+        // Open the reader before exercising contention.
         manager.search("warmup")
     }
 
@@ -119,6 +121,7 @@ class MessageFtsManagerTest {
     fun `index participates in outer Room transaction rollback`() = runBlocking {
         withTimeout(10_000) {
             val original = conversation("originalmessage")
+            database.conversationDao().insert(original.entity())
             manager.indexConversation(original)
             val replacement = original.copy(
                 messageNodes = listOf(MessageNode.of(UIMessage.assistant("replacementmessage"))),
@@ -133,6 +136,84 @@ class MessageFtsManagerTest {
             }
             assertEquals(1, manager.search("originalmessage").size)
             assertTrue(manager.search("replacementmessage").isEmpty())
+        }
+    }
+
+    @Test
+    fun `upstream incremental indexing preserves unchanged rowids and joins current titles`() = runBlocking {
+        val apple = UIMessage.user("apple pie")
+        val banana = UIMessage.assistant("banana split")
+        val cherry = UIMessage.user("cherry tart")
+        val original = conversation("unused").copy(
+            title = "first",
+            messageNodes = listOf(apple, banana, cherry).map { MessageNode.of(it) },
+        )
+        database.conversationDao().insert(original.entity())
+        manager.indexConversation(original)
+        val before = indexedRowids()
+        val durian = banana.copy(parts = UIMessage.assistant("durian cake").parts)
+        val elderberry = UIMessage.assistant("elderberry jam")
+        val updated = original.copy(
+            title = "renamed",
+            messageNodes = original.messageNodes.take(1) +
+                MessageNode.of(durian).copy(id = original.messageNodes[1].id) + MessageNode.of(elderberry),
+        )
+        database.conversationDao().update(updated.entity())
+        manager.indexConversation(updated)
+        val after = indexedRowids()
+        assertEquals(before[apple.id.toString()], after[apple.id.toString()])
+        assertNotEquals(before[banana.id.toString()], after[banana.id.toString()])
+        assertEquals(setOf(apple.id, banana.id, elderberry.id).map { it.toString() }.toSet(), after.keys)
+        assertTrue(manager.search("banana").isEmpty())
+        assertTrue(manager.search("cherry").isEmpty())
+        val result = manager.search("durian").single()
+        assertEquals(banana.id.toString(), result.messageId)
+        assertEquals("renamed", result.title)
+        assertEquals(indexRows("SELECT rowid, conversation_id FROM message_fts ORDER BY rowid"),
+            indexRows("SELECT fts_rowid, conversation_id FROM message_fts_rowid ORDER BY fts_rowid"))
+    }
+
+    @Test
+    fun `simple tokenizer supports pinyin ASCII prefixes and mixed Chinese queries`() = runBlocking {
+        val conversation = conversation("你好世界 hello Kotlin")
+        database.conversationDao().insert(conversation.entity())
+        manager.indexConversation(conversation)
+        for (keyword in listOf("你好世界", "nihaoshijie", "HELLO", "kot", "你好 hello")) {
+            assertEquals(keyword, listOf(conversation.id.toString()), manager.search(keyword).map { it.conversationId })
+        }
+        assertTrue(manager.search("你好 absent").isEmpty())
+        assertTrue(manager.search("   ").isEmpty())
+    }
+
+    @Test
+    fun `opening an upstream index without rowid mappings preserves existing entries`() = runBlocking {
+        val first = conversation("legacy apple")
+        val second = conversation("legacy banana")
+        for (conversation in listOf(first, second)) {
+            database.conversationDao().insert(conversation.entity())
+            manager.indexConversation(conversation)
+        }
+        val before = indexedRowids()
+        database.withFtsWriter { it.execSQL("DROP TABLE message_fts_rowid") }
+        database.close()
+        database = AppDatabaseFactory.create(context)
+        manager = MessageFtsManager(database)
+        assertEquals(before, indexedRowids())
+        manager.deleteConversation(first.id.toString())
+        assertEquals(listOf(second.id.toString()), manager.search("legacy").map { it.conversationId })
+        assertEquals(indexRows("SELECT rowid, conversation_id FROM message_fts ORDER BY rowid"),
+            indexRows("SELECT fts_rowid, conversation_id FROM message_fts_rowid ORDER BY fts_rowid"))
+    }
+
+    private suspend fun indexedRowids(): Map<String, Long> = database.withFtsReader { db ->
+        db.query("SELECT message_id, rowid FROM message_fts").use { cursor ->
+            buildMap { while (cursor.moveToNext()) put(cursor.getString(0), cursor.getLong(1)) }
+        }
+    }
+
+    private suspend fun indexRows(sql: String): List<Pair<Long, String>> = database.withFtsReader { db ->
+        db.query(sql).use { cursor ->
+            buildList { while (cursor.moveToNext()) add(cursor.getLong(0) to cursor.getString(1)) }
         }
     }
 
