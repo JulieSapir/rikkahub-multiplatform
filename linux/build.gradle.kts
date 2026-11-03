@@ -10,6 +10,7 @@ import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import org.gradle.api.tasks.testing.Test
 import org.gradle.api.tasks.JavaExec
 import org.gradle.process.ExecOperations
+import org.gradle.language.jvm.tasks.ProcessResources
 import org.jetbrains.compose.desktop.application.tasks.AbstractCheckNativeDistributionRuntime
 import org.jetbrains.compose.desktop.application.tasks.AbstractJvmToolOperationTask
 import org.jetbrains.compose.desktop.application.tasks.AbstractJLinkTask
@@ -304,6 +305,14 @@ sourceSets.named("main") {
     resources.srcDir(layout.buildDirectory.dir("bettertext/resources"))
     // 内嵌前端的产物（web-ui 构建后由 copy.ts 落到这里），Ktor 的 staticResources("/", "static") 就查这份
     resources.srcDir("../web/src/main/resources")
+}
+
+// 窗口与安装包共用仓库里的桌面图标，避免回退到 JDK 默认图标。
+tasks.named<ProcessResources>("processResources") {
+    from(rootProject.layout.projectDirectory.file("docs/icon.png")) {
+        into("icons")
+        rename { "rikkahub.png" }
+    }
 }
 
 // Room 的 schema 直接复用 app 模块导出的那一份，AutoMigration 才能读到历史版本
@@ -612,6 +621,9 @@ compose.desktop {
             vendor = "rerere"
             // Compose 默认保留桌面、日志和 EC 加密模块，再补数据库与原生库所需模块。
             modules("java.sql", "jdk.unsupported")
+            linux {
+                iconFile.set(rootProject.layout.projectDirectory.file("docs/icon.png"))
+            }
         }
     }
 }

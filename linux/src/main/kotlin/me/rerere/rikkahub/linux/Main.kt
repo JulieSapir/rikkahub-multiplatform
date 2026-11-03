@@ -4,6 +4,8 @@ import androidx.activity.compose.DesktopActivityContent
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
+import androidx.compose.ui.graphics.painter.BitmapPainter
+import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.ApplicationScope
@@ -16,6 +18,7 @@ import android.app.Application
 import me.rerere.rikkahub.linux.di.desktopPlatformModule
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
+import org.jetbrains.skia.Image
 
 /**
  * 桌面端入口。
@@ -46,9 +49,15 @@ fun main() {
 @Composable
 private fun ApplicationScope.DesktopWindow(activity: RouteActivity) {
     val content = remember(activity) { DesktopActivityContent.contentOf(activity) }
+    val icon = remember {
+        val bytes = checkNotNull(ClassLoader.getSystemResourceAsStream("icons/rikkahub.png"))
+            .use { it.readBytes() }
+        BitmapPainter(Image.makeFromEncoded(bytes).toComposeImageBitmap())
+    }
     Window(
         onCloseRequest = ::exitApplication,
         title = "RikkaHub",
+        icon = icon,
         state = rememberWindowState(width = 1280.dp, height = 860.dp),
     ) {
         content?.let {
