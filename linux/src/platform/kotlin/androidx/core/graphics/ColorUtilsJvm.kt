@@ -1,23 +1,9 @@
 package androidx.core.graphics
 
 import android.graphics.Color
-/**
- * AndroidX 的颜色工具里上游只用到“混合 / 加透明度 / ARGB 分量”这几个纯算术方法，
- * 直接按 int ARGB 实现，语义与 Android 一致。
- */
+
+/** 主题设置页使用的 ARGB 与 HSL 颜色转换。 */
 object ColorUtils {
-    fun setAlphaComponent(color: Int, alpha: Int): Int =
-        (color and 0x00ffffff) or (alpha.coerceIn(0, 255) shl 24)
-
-    fun blendARGB(color1: Int, color2: Int, ratio: Float): Int {
-        val r = ratio.coerceIn(0f, 1f)
-        val a = lerp(Color.alpha(color1), Color.alpha(color2), r)
-        val red = lerp(Color.red(color1), Color.red(color2), r)
-        val green = lerp(Color.green(color1), Color.green(color2), r)
-        val blue = lerp(Color.blue(color1), Color.blue(color2), r)
-        return Color.argb(a, red, green, blue)
-    }
-
     /** 与 Android 版一致：outHsl[0]=色相 0..360，[1]=饱和度 0..1，[2]=明度 0..1。 */
     fun colorToHSL(color: Int, outHsl: FloatArray) {
         require(outHsl.size >= 3) { "outHsl must have 3 slots" }
@@ -65,7 +51,4 @@ object ColorUtils {
             (hueToRgb(h - 1f / 3f) * 255).toInt().coerceIn(0, 255),
         )
     }
-
-    private fun lerp(from: Int, to: Int, ratio: Float): Int =
-        Math.round(from + (to - from) * ratio).coerceIn(0, 255)
 }
