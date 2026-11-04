@@ -16,7 +16,7 @@ import kotlin.math.log10
  * 找不到资源或拿不到音频设备（无显示器的服务器上很常见）都静默降级成 no-op，
  * 与 Android 端 SoundPool 的行为差异只剩「不会加载失败重试」。
  */
-class SoundEffectPlayer(private val context: Context) {
+class SoundEffectPlayer(context: Context) {
 
     // 调用点都在 UI 线程（Compose 回调），这里同步只是防 preload/play 竞态，不值得上并发容器
     private val clips = HashMap<Int, Clip?>()

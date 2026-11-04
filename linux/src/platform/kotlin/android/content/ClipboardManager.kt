@@ -74,13 +74,3 @@ class ClipboardManager {
         internal val shared = ClipboardManager()
     }
 }
-
-class ClipDescription(private val label: String) {
-    fun getContentDescription(): String = label
-
-    fun hasMimeType(mimeType: String): Boolean = mimeType == MIMETYPE_TEXT_PLAIN
-
-    companion object {
-        const val MIMETYPE_TEXT_PLAIN = "text/plain"
-    }
-}

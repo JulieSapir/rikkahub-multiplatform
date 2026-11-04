@@ -1,9 +1,7 @@
 package androidx.activity
 
 import android.app.Activity
-import android.content.Context
 import android.content.Intent
-import androidx.activity.result.ActivityResult
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContract
 
@@ -20,10 +18,6 @@ open class ComponentActivity : Activity() {
 
     /** 桌面端没有运行时权限，永远不会“需要解释”。 */
     fun shouldShowRequestPermissionRationale(permission: String): Boolean = false
-
-    companion object {
-        fun findActivity(context: Context): ComponentActivity? = context as? ComponentActivity
-    }
 }
 
 /** 与 Android 同名：register(key, contract, callback) 返回一个可 launch 的句柄。 */
@@ -40,5 +34,3 @@ class ActivityResultRegistry {
 
     fun unregister(key: String?) = Unit
 }
-
-typealias ActivityResultCallback = (ActivityResult) -> Unit

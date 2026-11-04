@@ -2,8 +2,6 @@ package androidx.core.content
 
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
-import android.graphics.Typeface
 import android.graphics.drawable.Drawable
 import android.net.Uri
 
@@ -35,19 +33,4 @@ object ContextCompat {
  */
 object FileProvider {
     fun getUriForFile(context: Context, authority: String, file: java.io.File): Uri = Uri.fromFile(file)
-
-    class Paths
-
-    object StrictMode {
-        fun unlockContentsAndTempStorage(path: String, token: Any?) = Unit
-
-        fun renewContentsAndTempStorage(path: String, token: Any?) = Unit
-    }
-}
-
-/** 上游只用于加载 assets 里的字体；桌面端字体由 Compose 直接读文件，这里返回一个非空占位。 */
-object ResourcesCompat {
-    fun getFont(context: Context, fontResId: Int): Typeface? = Typeface.DEFAULT
-
-    fun getDrawable(context: Context, drawableResId: Int, theme: Any?): Drawable? = null
 }

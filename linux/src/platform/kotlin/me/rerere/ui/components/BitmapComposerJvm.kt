@@ -14,7 +14,7 @@ import kotlinx.coroutines.CoroutineScope
  */
 val LocalExportContext = staticCompositionLocalOf { false }
 
-class BitmapComposer(private val mainScope: CoroutineScope) {
+class BitmapComposer(mainScope: CoroutineScope) {
     suspend fun composableToBitmap(
         activity: Activity,
         width: Dp? = null,

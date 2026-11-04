@@ -6,11 +6,7 @@ import com.google.firebase.Firebase
 class FirebaseCrashlytics {
     fun log(msg: String) = Unit
 
-    fun recordException(throwable: Throwable) = Unit
-
     fun setUserId(id: String?) = Unit
-
-    fun setCustomKey(key: String, value: Any?) = Unit
 }
 
 private val sharedCrashlytics = FirebaseCrashlytics()

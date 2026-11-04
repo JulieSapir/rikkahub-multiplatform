@@ -1,7 +1,6 @@
 package android.media
 
 import android.content.Context
-import java.io.File
 
 /**
  * 录音前的音频焦点、音效播放与媒体库扫描都是 Android 的媒体框架。
@@ -103,58 +102,4 @@ object MediaScannerConnection {
     interface OnScanCompletedListener {
         fun onScanCompleted(path: String, uri: android.net.Uri?)
     }
-}
-
-/** SoundEffectPlayer 之外，上游还直接用 MediaPlayer 播 TTS 输出；桌面端交给 javax.sound。 */
-class MediaPlayer {
-    interface OnCompletionListener {
-        fun onCompletion(player: MediaPlayer)
-    }
-
-    private var process: javax.sound.sampled.Clip? = null
-    private var listener: OnCompletionListener? = null
-
-    // stop()/release() 主动停止同样会发出 STOP 事件，这个标志把它们与自然播完区分开；
-    // 事件在音频线程异步送达，所以标志留到下一次 start 才复位
-    private var stopping = false
-
-    fun setDataSource(path: String) {
-        // 替换数据源前先释放旧 Clip，重复调用会泄漏混音器资源
-        process?.close()
-        stopping = false
-        val clip = javax.sound.sampled.AudioSystem.getClip()
-        javax.sound.sampled.AudioSystem.getAudioInputStream(File(path)).use { input ->
-            clip.open(input)
-        }
-        clip.addLineListener { event ->
-            if (event.type == javax.sound.sampled.LineEvent.Type.STOP && !stopping) {
-                listener?.onCompletion(this)
-            }
-        }
-        process = clip
-    }
-
-    fun prepare() = Unit
-
-    fun start() {
-        stopping = false
-        process?.start()
-    }
-
-    fun stop() {
-        stopping = true
-        process?.stop()
-    }
-
-    fun release() {
-        stopping = true
-        process?.close()
-        process = null
-    }
-
-    fun setOnCompletionListener(listener: OnCompletionListener) {
-        this.listener = listener
-    }
-
-    val isPlaying: Boolean get() = process?.isRunning ?: false
 }
