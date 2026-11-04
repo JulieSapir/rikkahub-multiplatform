@@ -75,8 +75,10 @@ class MarkdownRenderTest {
         // 至少要有一定比例的非白像素：空白或崩溃回退都过不了
         val bitmap = org.jetbrains.skia.Bitmap.makeFromImage(image)
         var inked = 0
-        for (y in 0 until bitmap.height step 3) for (x in 0 until bitmap.width step 3) {
-            if (bitmap.getColor(x, y) != -1) inked++
+        for (y in 0 until bitmap.height step 3) {
+            for (x in 0 until bitmap.width step 3) {
+                if (bitmap.getColor(x, y) != -1) inked++
+            }
         }
         assertTrue("渲染结果几乎是空白: $inked", inked > 2000)
     }

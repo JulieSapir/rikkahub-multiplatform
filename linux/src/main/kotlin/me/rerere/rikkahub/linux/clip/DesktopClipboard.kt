@@ -12,12 +12,15 @@ object DesktopClipboard {
         val clipboard = Toolkit.getDefaultToolkit().systemClipboard
         if (clipboard.isDataFlavorAvailable(DataFlavor.stringFlavor)) {
             clipboard.getData(DataFlavor.stringFlavor) as? String
-        } else null
+        } else {
+            null
+        }
     }.getOrNull()
 
     fun writeText(text: String): Boolean = runCatching {
         Toolkit.getDefaultToolkit().systemClipboard.setContents(
-            java.awt.datatransfer.StringSelection(text), null,
+            java.awt.datatransfer.StringSelection(text),
+            null,
         )
         true
     }.getOrDefault(false)

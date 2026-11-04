@@ -183,7 +183,8 @@ fun BetterText(
             }
         }
     }
-    val composableSlots = remember(converted) { converted.slots.withIndex().filter { it.value.content is ComposableInline } }
+    val composableSlots =
+        remember(converted) { converted.slots.withIndex().filter { it.value.content is ComposableInline } }
     val holder = remember { LayoutHolder() }
 
     if (composableSlots.isEmpty()) {
@@ -220,7 +221,10 @@ fun BetterText(
                 InlineAlign.Center -> SlotBox(width, height / 2f, height / 2f, 0f).also { offsets[i] = 0f }
                 InlineAlign.Baseline -> {
                     val baseline = sizes[i * 3 + 2].toFloat()
-                    SlotBox(width, baseline, height - baseline, paints.textCenter).also { offsets[i] = it.baseline - baseline }
+                    SlotBox(width, baseline, height - baseline, paints.textCenter).also {
+                        offsets[i] =
+                            it.baseline - baseline
+                    }
                 }
             }
             slot.id to InlineTextContent(box.placeholder(this)) {}

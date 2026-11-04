@@ -10,6 +10,12 @@ import com.google.zxing.DecodeHintType
 import com.google.zxing.MultiFormatReader
 import com.google.zxing.RGBLuminanceSource
 import com.google.zxing.common.HybridBinarizer
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.swing.Swing
+import kotlinx.coroutines.withContext
 import java.awt.BorderLayout
 import java.awt.GraphicsEnvironment
 import java.awt.event.WindowAdapter
@@ -20,12 +26,6 @@ import javax.swing.JButton
 import javax.swing.JFrame
 import javax.swing.SwingUtilities
 import javax.swing.WindowConstants
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.swing.Swing
-import kotlinx.coroutines.withContext
 
 sealed class QRResult {
     data class QRSuccess(val content: QRContent) : QRResult()
@@ -49,6 +49,7 @@ class ScanQRCode : ActivityResultContract<Unit?, QRResult> {
     override fun execute(context: Context, input: Unit?, callback: (QRResult) -> Unit) {
         // 解码成功 / 用户取消 / 异常三条路可能同时到达，callback 只允许调一次
         val delivered = AtomicBoolean()
+
         // 结果统一回到 EDT 再回调，与文件选择等其它契约的回调线程一致（Compose 主线程就是 EDT）
         fun deliver(result: QRResult) {
             if (delivered.compareAndSet(false, true)) {

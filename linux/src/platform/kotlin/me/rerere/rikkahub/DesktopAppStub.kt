@@ -1,6 +1,5 @@
 package me.rerere.rikkahub
 
-
 /**
  * 这几个通知渠道 ID 在 Android 端声明于 RikkaHubApp（Application 子类），
  * ChatNotificationManager / MediaCreationService 引用它们。桌面端不启用 Application 壳，

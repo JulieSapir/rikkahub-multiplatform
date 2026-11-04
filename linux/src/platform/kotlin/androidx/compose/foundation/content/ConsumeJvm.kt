@@ -33,7 +33,9 @@ private fun TransferableContent.desktopItems(): List<TransferableItem> {
         if (transferable.isDataFlavorSupported(DataFlavor.javaFileListFlavor)) {
             @Suppress("UNCHECKED_CAST")
             (transferable.getTransferData(DataFlavor.javaFileListFlavor) as? List<File>).orEmpty()
-        } else emptyList()
+        } else {
+            emptyList()
+        }
     }.getOrDefault(emptyList())
     if (files.isNotEmpty()) {
         return files.map { TransferableItem(uri = Uri.fromFile(it), text = null) }
@@ -41,7 +43,9 @@ private fun TransferableContent.desktopItems(): List<TransferableItem> {
     val text = runCatching {
         if (transferable.isDataFlavorSupported(DataFlavor.stringFlavor)) {
             transferable.getTransferData(DataFlavor.stringFlavor) as? String
-        } else null
+        } else {
+            null
+        }
     }.getOrNull()
     return if (text == null) emptyList() else listOf(TransferableItem(uri = null, text = text))
 }

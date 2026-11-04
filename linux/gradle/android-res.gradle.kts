@@ -206,7 +206,8 @@ abstract class GenerateRikkaResTask : DefaultTask() {
         val canvas = BufferedImage(size, size, BufferedImage.TYPE_INT_ARGB)
         val graphics = canvas.createGraphics()
         graphics.setRenderingHint(
-            RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR
+            RenderingHints.KEY_INTERPOLATION,
+            RenderingHints.VALUE_INTERPOLATION_BILINEAR
         )
         layers.forEach { layer -> graphics.drawImage(layer, 0, 0, size, size, null) }
         graphics.dispose()

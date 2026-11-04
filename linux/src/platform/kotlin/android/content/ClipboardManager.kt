@@ -28,7 +28,9 @@ class ClipboardManager {
         val clipboard = Toolkit.getDefaultToolkit().systemClipboard
         if (clipboard.isDataFlavorAvailable(DataFlavor.stringFlavor)) {
             clipboard.getData(DataFlavor.stringFlavor) as? String
-        } else null
+        } else {
+            null
+        }
     }.getOrNull()
 
     fun getText(): String = readText().orEmpty()

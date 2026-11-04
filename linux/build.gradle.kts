@@ -1,19 +1,19 @@
-import org.gradle.api.tasks.TaskAction
-import org.gradle.api.tasks.OutputDirectory
-import org.gradle.api.tasks.Input
-import org.gradle.api.provider.Provider
-import org.gradle.api.provider.Property
-import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.DefaultTask
-import org.gradle.kotlin.dsl.support.serviceOf
-import org.jetbrains.compose.desktop.application.dsl.TargetFormat
-import org.gradle.api.tasks.testing.Test
+import org.gradle.api.file.DirectoryProperty
+import org.gradle.api.provider.Property
+import org.gradle.api.provider.Provider
+import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.JavaExec
-import org.gradle.process.ExecOperations
+import org.gradle.api.tasks.OutputDirectory
+import org.gradle.api.tasks.TaskAction
+import org.gradle.api.tasks.testing.Test
+import org.gradle.kotlin.dsl.support.serviceOf
 import org.gradle.language.jvm.tasks.ProcessResources
+import org.gradle.process.ExecOperations
+import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import org.jetbrains.compose.desktop.application.tasks.AbstractCheckNativeDistributionRuntime
-import org.jetbrains.compose.desktop.application.tasks.AbstractJvmToolOperationTask
 import org.jetbrains.compose.desktop.application.tasks.AbstractJLinkTask
+import org.jetbrains.compose.desktop.application.tasks.AbstractJvmToolOperationTask
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 /**
@@ -307,7 +307,13 @@ tasks.matching { it.name.startsWith("ksp") }.configureEach {
 // 生成的 R / 字符串表要先产出（KSP 也会读同一批源码）
 tasks.matching { it.name == "processResources" || it.name.startsWith("compileKotlin") || it.name.startsWith("ksp") }
     .configureEach {
-        dependsOn("generateRikkaRes", "rewriteCompatSources", "unpackBettertextSources", "extractKatexFonts", "generateBuildConfig")
+        dependsOn(
+            "generateRikkaRes",
+            "rewriteCompatSources",
+            "unpackBettertextSources",
+            "extractKatexFonts",
+            "generateBuildConfig"
+        )
     }
 
 // hugeicons-compose 只发 Android AAR，纯 JVM 模块没法直接依赖，这里把它的 classes.jar 抽出来用。
@@ -384,8 +390,11 @@ val unpackBettertextSources = tasks.register<Sync>("unpackBettertextSources") {
         // 在调用处包一层（android/graphics/CanvasJvm.kt）。上游改了这两处时下面的检查会报错
         filesMatching("me/rerere/bettertext/latex/Latex.kt") {
             filter { line ->
-                if (line.startsWith("import ")) line
-                else line.replace(".nativeCanvas", ".let { c -> android.graphics.Canvas(c.nativeCanvas) }")
+                if (line.startsWith("import ")) {
+                    line
+                } else {
+                    line.replace(".nativeCanvas", ".let { c -> android.graphics.Canvas(c.nativeCanvas) }")
+                }
             }
         }
     }

@@ -51,8 +51,10 @@ object KcefRuntime {
 
     /** JBR 的架构名 -> 发布页给出的 SHA-512 */
     private val packages = mapOf(
-        "x64" to "1c875b43de4d20deb429a686331e4ea5c7c34c519569d1a3b785867d761ed002941203f79b19a338e4a49fab48a6cd4d35408a7356f55781e95c3d60c6c5a8d1",
-        "aarch64" to "1d8aa9594b80039b5c7aab31cb079e746c70f473bcbecf626378cd6897628e263161fbc2757f1b7300d1c7819e55d1b94e0a5d74ce1cce88c66201dcad18562b",
+        "x64" to
+            "1c875b43de4d20deb429a686331e4ea5c7c34c519569d1a3b785867d761ed002941203f79b19a338e4a49fab48a6cd4d35408a7356f55781e95c3d60c6c5a8d1",
+        "aarch64" to
+            "1d8aa9594b80039b5c7aab31cb079e746c70f473bcbecf626378cd6897628e263161fbc2757f1b7300d1c7819e55d1b94e0a5d74ce1cce88c66201dcad18562b",
     )
 
     /** JBR 的 lib/ 目录里属于 CEF 的部分，其余是 JDK */

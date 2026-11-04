@@ -27,8 +27,14 @@ class DatabaseCompatibilityTest {
             }
             DesktopSQLiteDriver.create().open(file.absolutePath).use { connection ->
                 val db = SupportSQLiteDatabase(connection)
-                assertEquals(32L, db.query("PRAGMA user_version").use { it.moveToFirst(); it.getLong(0) })
-                assertTrue(db.query("PRAGMA integrity_check").use { it.moveToFirst(); it.getString(0) == "ok" })
+                assertEquals(32L, db.query("PRAGMA user_version").use {
+                    it.moveToFirst()
+                    it.getLong(0)
+                })
+                assertTrue(db.query("PRAGMA integrity_check").use {
+                    it.moveToFirst()
+                    it.getString(0) == "ok"
+                })
             }
         }
     }
@@ -37,10 +43,14 @@ class DatabaseCompatibilityTest {
     fun `upstream usage migration preserves rows and backfills usage`() = runBlocking {
         val file = File(temporary.root, "usage")
         createUpstreamSchema(file, 30) { db ->
-            db.execSQL("INSERT INTO ConversationEntity (id, title, nodes, create_at, update_at) VALUES ('conv', 'title', '[]', 1000, 1000)")
+            db.execSQL(
+                "INSERT INTO ConversationEntity (id, title, nodes, create_at, update_at) VALUES ('conv', 'title', '[]', 1000, 1000)"
+            )
             db.execSQL(
                 "INSERT INTO message_node (id, conversation_id, node_index, messages, select_index) VALUES ('node', 'conv', 0, ?, 0)",
-                arrayOf("""[{"role":"assistant","createdAt":"2026-08-12T09:01:00","modelId":"model-a","usage":{"promptTokens":100,"completionTokens":40,"cachedTokens":20}}]"""),
+                arrayOf(
+                    """[{"role":"assistant","createdAt":"2026-08-12T09:01:00","modelId":"model-a","usage":{"promptTokens":100,"completionTokens":40,"cachedTokens":20}}]"""
+                ),
             )
         }
         AppDatabaseFactory.createForRestore(file.absolutePath).useDatabase { database ->
@@ -48,7 +58,9 @@ class DatabaseCompatibilityTest {
         }
         DesktopSQLiteDriver.create().open(file.absolutePath).use { connection ->
             val db = SupportSQLiteDatabase(connection)
-            db.query("SELECT source, model_id, prompt_tokens, completion_tokens, cached_tokens FROM usage_record").use { cursor ->
+            db.query(
+                "SELECT source, model_id, prompt_tokens, completion_tokens, cached_tokens FROM usage_record"
+            ).use { cursor ->
                 assertTrue(cursor.moveToFirst())
                 assertEquals("CHAT", cursor.getString(0))
                 assertEquals("model-a", cursor.getString(1))
@@ -67,12 +79,16 @@ class DatabaseCompatibilityTest {
         file.parentFile!!.mkdirs()
         val messages = JsonInstant.encodeToString(listOf(UIMessage.assistant("你好世界 hello world")))
         createUpstreamSchema(file, 32) { db ->
-            db.execSQL("INSERT INTO ConversationEntity (id, title, nodes, create_at, update_at) VALUES ('conv', 'original title', '[]', 1000, 1000)")
+            db.execSQL(
+                "INSERT INTO ConversationEntity (id, title, nodes, create_at, update_at) VALUES ('conv', 'original title', '[]', 1000, 1000)"
+            )
             db.execSQL(
                 "INSERT INTO message_node (id, conversation_id, node_index, messages, select_index) VALUES ('node', 'conv', 0, ?, 0)",
                 arrayOf(messages),
             )
-            db.execSQL("CREATE VIRTUAL TABLE message_fts USING fts5(text, node_id UNINDEXED, message_id UNINDEXED, conversation_id UNINDEXED, title UNINDEXED, update_at UNINDEXED, tokenize='unicode61')")
+            db.execSQL(
+                "CREATE VIRTUAL TABLE message_fts USING fts5(text, node_id UNINDEXED, message_id UNINDEXED, conversation_id UNINDEXED, title UNINDEXED, update_at UNINDEXED, tokenize='unicode61')"
+            )
             db.execSQL("INSERT INTO message_fts(text, conversation_id) VALUES ('旧 的 预 分词', 'conv')")
         }
         repeat(2) {
@@ -84,8 +100,14 @@ class DatabaseCompatibilityTest {
         }
         DesktopSQLiteDriver.create().open(file.absolutePath).use { connection ->
             val db = SupportSQLiteDatabase(connection)
-            assertEquals(messages, db.query("SELECT messages FROM message_node").use { it.moveToFirst(); it.getString(0) })
-            assertEquals("你好世界 hello world", db.query("SELECT text FROM message_fts").use { it.moveToFirst(); it.getString(0) })
+            assertEquals(messages, db.query("SELECT messages FROM message_node").use {
+                it.moveToFirst()
+                it.getString(0)
+            })
+            assertEquals("你好世界 hello world", db.query("SELECT text FROM message_fts").use {
+                it.moveToFirst()
+                it.getString(0)
+            })
         }
     }
 
@@ -93,7 +115,9 @@ class DatabaseCompatibilityTest {
     fun `unsupported schema is rejected without replacing existing data`() = runBlocking {
         val file = File(temporary.root, "future")
         createUpstreamSchema(file, 32) { db ->
-            db.execSQL("INSERT INTO ConversationEntity (id, title, nodes, create_at, update_at) VALUES ('kept', 'keep me', '[]', 1000, 1000)")
+            db.execSQL(
+                "INSERT INTO ConversationEntity (id, title, nodes, create_at, update_at) VALUES ('kept', 'keep me', '[]', 1000, 1000)"
+            )
             db.execSQL("PRAGMA user_version = 9999")
         }
         var rejected = false
@@ -106,9 +130,14 @@ class DatabaseCompatibilityTest {
         // Room may update journal mode, but the schema version and stored tables survive.
         DesktopSQLiteDriver.create().open(file.absolutePath).use { connection ->
             val db = SupportSQLiteDatabase(connection)
-            assertEquals(9999L, db.query("PRAGMA user_version").use { it.moveToFirst(); it.getLong(0) })
-            assertEquals("keep me", db.query("SELECT title FROM ConversationEntity WHERE id = 'kept'").use { it.moveToFirst(); it.getString(0) })
+            assertEquals(9999L, db.query("PRAGMA user_version").use {
+                it.moveToFirst()
+                it.getLong(0)
+            })
+            assertEquals("keep me", db.query("SELECT title FROM ConversationEntity WHERE id = 'kept'").use {
+                it.moveToFirst()
+                it.getString(0)
+            })
         }
     }
-
 }

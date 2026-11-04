@@ -22,6 +22,9 @@ class ClipData private constructor(
     class Item(val text: CharSequence?)
 
     companion object {
-        fun newPlainText(label: String?, text: String): ClipData = ClipData(label.orEmpty(), StringSelection(text), text)
+        fun newPlainText(
+            label: String?,
+            text: String
+        ): ClipData = ClipData(label.orEmpty(), StringSelection(text), text)
     }
 }

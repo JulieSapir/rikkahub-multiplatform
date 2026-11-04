@@ -12,7 +12,15 @@ val buildSimple = tasks.register<Exec>("buildSimple") {
     dependsOn(configureSimple)
     inputs.dir("native/simple")
     outputs.file(layout.buildDirectory.file("native/simple/src/libsimple.so"))
-    commandLine("cmake", "--build", layout.buildDirectory.dir("native/simple").get().asFile, "--target", "simple", "--parallel", "2")
+    commandLine(
+        "cmake",
+        "--build",
+        layout.buildDirectory.dir("native/simple").get().asFile,
+        "--target",
+        "simple",
+        "--parallel",
+        "2"
+    )
 }
 
 val bundleSimple = tasks.register<Copy>("bundleSimple") {

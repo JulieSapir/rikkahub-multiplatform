@@ -1,17 +1,17 @@
 package me.rerere.rikkahub.linux
 
 import android.app.Application
-import me.rerere.rikkahub.data.db.AppDatabase
 import me.rerere.rikkahub.data.datastore.SettingsStore
+import me.rerere.rikkahub.data.db.AppDatabase
 import me.rerere.rikkahub.data.repository.ConversationRepository
-import me.rerere.rikkahub.linux.di.desktopPlatformModule
 import me.rerere.rikkahub.linux.desktop.DesktopBootstrap
+import me.rerere.rikkahub.linux.di.desktopPlatformModule
 import me.rerere.rikkahub.service.ChatService
-import org.koin.dsl.koinApplication
 import org.junit.After
 import org.junit.Assert.assertNotNull
 import org.junit.Before
 import org.junit.Test
+import org.koin.dsl.koinApplication
 import java.io.File
 import kotlin.random.Random
 

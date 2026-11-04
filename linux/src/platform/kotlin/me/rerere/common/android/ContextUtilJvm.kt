@@ -1,5 +1,6 @@
 @file:Suppress("ClassName")
 /** copy of common/src/main/java/me/rerere/common/android/ContextUtil.kt */
+
 package me.rerere.common.android
 
 import android.content.Context

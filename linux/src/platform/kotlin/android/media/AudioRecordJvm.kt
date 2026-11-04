@@ -48,7 +48,9 @@ class AudioRecord(
     )
 
     /** open 缓冲给足 provider 传进来的大小，read 才能一次拿到整块数据 */
-    private val openBufferBytes = bufferSizeInBytes.coerceAtLeast(getMinBufferSize(sampleRateInHz, channelConfig, audioFormat))
+    private val openBufferBytes = bufferSizeInBytes.coerceAtLeast(
+        getMinBufferSize(sampleRateInHz, channelConfig, audioFormat)
+    )
 
     private val ioLock = Any()
 

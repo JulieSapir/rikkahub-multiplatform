@@ -2,8 +2,8 @@ package me.rerere.rikkahub.ui.floating
 
 import android.app.Application
 import me.rerere.rikkahub.AppScope
-import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.service.ChatFloatingTracker
+import me.rerere.rikkahub.service.ChatService
 
 /**
  * Android 端的聊天气泡/悬浮面板用 FloatingX 在系统窗口层画（原文件在 build.gradle.kts 里 exclude）。

@@ -13,7 +13,10 @@ class AudioRecordJvmTest {
 
     @Test
     fun `getMinBufferSize returns 200ms of bytes for 16k mono pcm16`() {
-        assertEquals(6400, AudioRecord.getMinBufferSize(16000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT))
+        assertEquals(
+            6400,
+            AudioRecord.getMinBufferSize(16000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
+        )
         assertTrue(AudioRecord.getMinBufferSize(8000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT) > 0)
     }
 

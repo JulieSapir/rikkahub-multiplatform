@@ -71,8 +71,14 @@ class BackupCompatibilityTest {
         DatabaseBackup.normalize(snapshot)
         DesktopSQLiteDriver.create().open(snapshot.absolutePath).use { connection ->
             val db = SupportSQLiteDatabase(connection)
-            assertEquals(1, db.query("SELECT count(*) FROM backup_probe").use { it.moveToFirst(); it.getInt(0) })
-            assertEquals(1, db.query("SELECT count(*) FROM search_probe WHERE search_probe MATCH '你好'").use { it.moveToFirst(); it.getInt(0) })
+            assertEquals(1, db.query("SELECT count(*) FROM backup_probe").use {
+                it.moveToFirst()
+                it.getInt(0)
+            })
+            assertEquals(1, db.query("SELECT count(*) FROM search_probe WHERE search_probe MATCH '你好'").use {
+                it.moveToFirst()
+                it.getInt(0)
+            })
         }
         assertFalse(File(snapshot.path + "-wal").exists())
         assertFalse(File(snapshot.path + "-shm").exists())
@@ -111,7 +117,10 @@ class BackupCompatibilityTest {
         manager.stageRestore(current, includeDatabase = false, includeFiles = false)
         val pending = File(context.noBackupFilesDir, "backup-restore/pending/settings.json")
         val original = JsonInstant.parseToJsonElement(settingsJson).jsonObject["launchCount"]!!.jsonPrimitive.int
-        assertEquals(original, JsonInstant.parseToJsonElement(pending.readText()).jsonObject["launchCount"]!!.jsonPrimitive.int)
+        assertEquals(
+            original,
+            JsonInstant.parseToJsonElement(pending.readText()).jsonObject["launchCount"]!!.jsonPrimitive.int
+        )
     }
 
     @Test fun `archives without launch count stage the upstream zero default`() = runBlocking {
@@ -122,10 +131,18 @@ class BackupCompatibilityTest {
         val pending = File(context.noBackupFilesDir, "backup-restore/pending/settings.json")
         val archive = File(temporary.root, "old-settings.zip")
         ZipOutputStream(archive.outputStream()).use { zip ->
-            zip.add("settings.json", JsonObject(JsonInstant.parseToJsonElement(settingsJson).jsonObject - "launchCount").toString().toByteArray())
+            zip.add(
+                "settings.json",
+                JsonObject(
+                    JsonInstant.parseToJsonElement(settingsJson).jsonObject - "launchCount"
+                ).toString().toByteArray()
+            )
         }
         manager.stageRestore(archive, includeDatabase = false, includeFiles = false)
-        assertEquals(0, JsonInstant.parseToJsonElement(pending.readText()).jsonObject["launchCount"]!!.jsonPrimitive.int)
+        assertEquals(
+            0,
+            JsonInstant.parseToJsonElement(pending.readText()).jsonObject["launchCount"]!!.jsonPrimitive.int
+        )
     }
 
     @Test fun `nested attachments survive while partial downloads are excluded`() = runBlocking {
@@ -155,7 +172,9 @@ class BackupCompatibilityTest {
     @Test fun `old upstream database migrates on staging copy`() = runBlocking {
         val source = File(temporary.root, "old")
         createUpstreamSchema(source, 30) { db ->
-            db.execSQL("INSERT INTO ConversationEntity (id, title, nodes, create_at, update_at) VALUES ('old', 'old title', '[]', 1, 1)")
+            db.execSQL(
+                "INSERT INTO ConversationEntity (id, title, nodes, create_at, update_at) VALUES ('old', 'old title', '[]', 1, 1)"
+            )
         }
         val archive = File(temporary.root, "old.zip")
         ZipOutputStream(archive.outputStream()).use { it.add(DatabaseBackup.ARCHIVE_DATABASE, source.readBytes()) }
@@ -163,8 +182,14 @@ class BackupCompatibilityTest {
         val staged = File(context.noBackupFilesDir, "backup-restore/pending/payload/database/database")
         DesktopSQLiteDriver.create().open(staged.path).use { connection ->
             val db = SupportSQLiteDatabase(connection)
-            assertEquals(32, db.query("PRAGMA user_version").use { it.moveToFirst(); it.getInt(0) })
-            assertEquals("old title", db.query("SELECT title FROM ConversationEntity").use { it.moveToFirst(); it.getString(0) })
+            assertEquals(32, db.query("PRAGMA user_version").use {
+                it.moveToFirst()
+                it.getInt(0)
+            })
+            assertEquals("old title", db.query("SELECT title FROM ConversationEntity").use {
+                it.moveToFirst()
+                it.getString(0)
+            })
         }
         assertEquals("live", live.probe())
     }
@@ -194,7 +219,11 @@ class BackupCompatibilityTest {
 
     private suspend fun assertRejected(block: suspend () -> Unit) {
         var rejected = false
-        try { block() } catch (_: Exception) { rejected = true }
+        try {
+            block()
+        } catch (_: Exception) {
+            rejected = true
+        }
         assertTrue("Invalid backup must be rejected", rejected)
     }
 
@@ -205,7 +234,10 @@ class BackupCompatibilityTest {
     }
 
     private suspend fun AppDatabase.exec(sql: String) = useConnection(isReadOnly = false) {
-        it.usePrepared(sql) { statement -> statement.step(); Unit }
+        it.usePrepared(sql) { statement ->
+            statement.step()
+            Unit
+        }
     }
 
     private suspend fun AppDatabase.probe(): String = useConnection(isReadOnly = true) {

@@ -192,7 +192,13 @@ fun WebView(
     onUpdated: (WebViewController) -> Unit = {},
 ) {
     Box(modifier = modifier) {
-        CefWebView(state = state, mode = mode, modifier = Modifier.fillMaxSize(), onCreated = onCreated, onUpdated = onUpdated)
+        CefWebView(
+            state = state,
+            mode = mode,
+            modifier = Modifier.fillMaxSize(),
+            onCreated = onCreated,
+            onUpdated = onUpdated
+        )
         if (state.isLoading) {
             LinearProgressIndicator(
                 progress = { state.loadingProgress },

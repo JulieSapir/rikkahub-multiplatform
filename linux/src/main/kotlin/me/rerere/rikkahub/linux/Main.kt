@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.linux
 
+import android.app.Application
 import androidx.activity.compose.DesktopActivityContent
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -14,11 +15,10 @@ import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import me.rerere.rikkahub.RouteActivity
 import me.rerere.rikkahub.linux.desktop.DesktopBootstrap
-import android.app.Application
 import me.rerere.rikkahub.linux.di.desktopPlatformModule
+import org.jetbrains.skia.Image
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
-import org.jetbrains.skia.Image
 
 /**
  * 桌面端入口。

@@ -5,9 +5,9 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.unit.dp
+import org.w3c.dom.Element
 import java.util.concurrent.ConcurrentHashMap
 import javax.xml.parsers.DocumentBuilderFactory
-import org.w3c.dom.Element
 
 /**
  * Android 的 VectorDrawable（res/drawable 下的 xml）在桌面端没有渲染管线：

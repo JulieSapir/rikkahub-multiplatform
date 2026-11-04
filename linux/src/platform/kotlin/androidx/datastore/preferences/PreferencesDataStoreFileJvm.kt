@@ -10,4 +10,4 @@ import java.io.File
  * 文件名（<name>.preferences_pb，DataStore 会校验这个后缀），便于直接对照 Android 端的数据排查。
  */
 fun Context.preferencesDataStoreFile(name: String): File =
-    File(dataDir, "data/${name}.preferences_pb").apply { parentFile?.mkdirs() }
+    File(dataDir, "data/$name.preferences_pb").apply { parentFile?.mkdirs() }

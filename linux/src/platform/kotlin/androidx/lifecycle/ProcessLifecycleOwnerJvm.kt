@@ -56,7 +56,9 @@ private class DesktopLifecycle : Lifecycle() {
 
     fun setForeground(value: Boolean) {
         val changed = synchronized(observers) {
-            if (foreground == value) false else {
+            if (foreground == value) {
+                false
+            } else {
                 foreground = value
                 true
             }

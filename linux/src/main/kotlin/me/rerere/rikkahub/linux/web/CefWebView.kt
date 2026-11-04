@@ -302,9 +302,14 @@ private class CefSession(
         private set
     var cursor: PointerIcon by mutableStateOf(PointerIcon(Cursor.getDefaultCursor()))
         private set
+
     @Volatile var density: Float = 1f
+
     @Volatile var screenOrigin: Offset = Offset.Zero
-    @Volatile private var viewSize = IntSize(1, 1) // DIP
+
+    // DIP
+    @Volatile private var viewSize = IntSize(1, 1)
+
     @Volatile private var created = false
     private val pixelLock = Any()
     private var view: Bitmap? = null
@@ -373,7 +378,10 @@ private class CefSession(
 
         override fun onCursorChange(browser: CefBrowser?, cursorType: Int): Boolean {
             SwingUtilities.invokeLater {
-                cursor = PointerIcon(runCatching { Cursor.getPredefinedCursor(cursorType) }.getOrDefault(Cursor.getDefaultCursor()))
+                cursor =
+                    PointerIcon(
+                        runCatching { Cursor.getPredefinedCursor(cursorType) }.getOrDefault(Cursor.getDefaultCursor())
+                    )
             }
             return true
         }
@@ -416,7 +424,12 @@ private class CefSession(
             }
         })
         client.addLoadHandler(object : CefLoadHandlerAdapter() {
-            override fun onLoadingStateChange(browser: CefBrowser?, isLoading: Boolean, canGoBack: Boolean, canGoForward: Boolean) =
+            override fun onLoadingStateChange(
+                browser: CefBrowser?,
+                isLoading: Boolean,
+                canGoBack: Boolean,
+                canGoForward: Boolean
+            ) =
                 onEdt {
                     state.isLoading = isLoading
                     state.loadingProgress = if (isLoading) 0.1f else 0f
@@ -443,7 +456,12 @@ private class CefSession(
                 if (frame?.isMain == true && errorCode != CefLoadHandler.ErrorCode.ERR_ABORTED) {
                     onEdt {
                         state.pushConsoleMessage(
-                            ConsoleMessage(ConsoleMessage.MessageLevel.ERROR, "$errorText ($errorCode)", failedUrl.orEmpty(), 0),
+                            ConsoleMessage(
+                                ConsoleMessage.MessageLevel.ERROR,
+                                "$errorText ($errorCode)",
+                                failedUrl.orEmpty(),
+                                0
+                            ),
                         )
                     }
                 }
@@ -459,7 +477,12 @@ private class CefSession(
             }
 
             // 与 Android WebView 默认一致：新窗口在当前视图里打开
-            override fun onBeforePopup(browser: CefBrowser?, frame: CefFrame?, targetUrl: String?, targetFrameName: String?): Boolean {
+            override fun onBeforePopup(
+                browser: CefBrowser?,
+                frame: CefFrame?,
+                targetUrl: String?,
+                targetFrameName: String?
+            ): Boolean {
                 if (!targetUrl.isNullOrBlank()) browser?.loadURL(targetUrl)
                 return true
             }
@@ -467,7 +490,12 @@ private class CefSession(
         if (mode == WebViewMode.Offscreen) {
             // 离屏模式下 CEF 自带的右键菜单没有地方画
             client.addContextMenuHandler(object : CefContextMenuHandlerAdapter() {
-                override fun onBeforeContextMenu(browser: CefBrowser?, frame: CefFrame?, params: CefContextMenuParams?, model: CefMenuModel) {
+                override fun onBeforeContextMenu(
+                    browser: CefBrowser?,
+                    frame: CefFrame?,
+                    params: CefContextMenuParams?,
+                    model: CefMenuModel
+                ) {
                     model.clear()
                 }
             })
@@ -571,7 +599,9 @@ private class CefSession(
 
     fun sendMouse(id: Int, position: Offset, awt: MouseEvent?) {
         if (!created) return
-        val button = awt?.button?.takeIf { id == MouseEvent.MOUSE_PRESSED || id == MouseEvent.MOUSE_RELEASED } ?: MouseEvent.NOBUTTON
+        val button =
+            awt?.button?.takeIf { id == MouseEvent.MOUSE_PRESSED || id == MouseEvent.MOUSE_RELEASED }
+                ?: MouseEvent.NOBUTTON
         browser.sendMouseEvent(
             MouseEvent(
                 eventSource,
@@ -626,13 +656,14 @@ private class CefSession(
     }
 
     // ---- JS 桥：把 state.interfaces 里带 @JavascriptInterface 的方法暴露成 window.<名字>.<方法> ----
-    private val bridgeMethods: Map<String, Map<String, java.lang.reflect.Method>> = state.interfaces.mapValues { (_, target) ->
-        target.javaClass.methods
-            .filter { it.isAnnotationPresent(JavascriptInterface::class.java) }
-            // 上游的接口对象常是 private class（如 MermaidInterface），Android WebView 不在乎可见性，这里也放开
-            .onEach { it.isAccessible = true }
-            .associateBy { it.name }
-    }
+    private val bridgeMethods: Map<String, Map<String, java.lang.reflect.Method>> =
+        state.interfaces.mapValues { (_, target) ->
+            target.javaClass.methods
+                .filter { it.isAnnotationPresent(JavascriptInterface::class.java) }
+                // 上游的接口对象常是 private class（如 MermaidInterface），Android WebView 不在乎可见性，这里也放开
+                .onEach { it.isAccessible = true }
+                .associateBy { it.name }
+        }
 
     private fun bridgeScript(): String = buildString {
         append("(function(){var q=window.$QUERY_FN;if(!q)return;")

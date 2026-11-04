@@ -2,19 +2,19 @@ package android.content
 
 import android.app.desktopNotificationManager
 import android.content.pm.ApplicationInfo
-import android.media.AudioManager
-import android.net.Uri
-import android.os.BatteryManager
-import me.rerere.rikkahub.linux.service.DesktopServiceRouter
-import me.rerere.rikkahub.linux.res.RikkaRes
-import me.rerere.rikkahub.linux.state.AppPaths
-import java.awt.Desktop
 import android.content.pm.PackageManager
 import android.content.res.AssetManager
 import android.content.res.Resources
 import android.database.Cursor
 import android.database.MatrixCursor
+import android.media.AudioManager
+import android.net.Uri
+import android.os.BatteryManager
 import android.provider.OpenableColumns
+import me.rerere.rikkahub.linux.res.RikkaRes
+import me.rerere.rikkahub.linux.service.DesktopServiceRouter
+import me.rerere.rikkahub.linux.state.AppPaths
+import java.awt.Desktop
 import java.io.File
 import java.io.FileOutputStream
 import java.io.OutputStream

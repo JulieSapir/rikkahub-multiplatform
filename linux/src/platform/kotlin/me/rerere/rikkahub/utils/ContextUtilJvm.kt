@@ -81,7 +81,8 @@ fun Context.openUsageAccessSettings() {
 fun Context.writeClipboardText(text: String) {
     runCatching {
         java.awt.Toolkit.getDefaultToolkit().systemClipboard.setContents(
-            java.awt.datatransfer.StringSelection(text), null
+            java.awt.datatransfer.StringSelection(text),
+            null
         )
     }
 }

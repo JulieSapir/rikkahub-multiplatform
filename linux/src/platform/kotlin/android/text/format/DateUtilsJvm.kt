@@ -50,8 +50,11 @@ object DateUtils {
                 val formatter = DateTimeFormatter.ofLocalizedDate(style)
                 // 非默认 Locale 的本地化日期格式可能带星期/纪元信息，这里统一按本地时区的 ISO 日期兜底
                 runCatching { date.format(formatter) }.getOrElse {
-                    if (sameYear) date.format(DateTimeFormatter.ofPattern("M-d"))
-                    else date.format(DateTimeFormatter.ISO_LOCAL_DATE)
+                    if (sameYear) {
+                        date.format(DateTimeFormatter.ofPattern("M-d"))
+                    } else {
+                        date.format(DateTimeFormatter.ISO_LOCAL_DATE)
+                    }
                 }
             }
         }

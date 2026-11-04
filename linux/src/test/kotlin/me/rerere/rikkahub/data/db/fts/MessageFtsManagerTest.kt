@@ -18,8 +18,8 @@ import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.MessageNode
 import org.junit.After
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -169,8 +169,10 @@ class MessageFtsManagerTest {
         val result = manager.search("durian").single()
         assertEquals(banana.id.toString(), result.messageId)
         assertEquals("renamed", result.title)
-        assertEquals(indexRows("SELECT rowid, conversation_id FROM message_fts ORDER BY rowid"),
-            indexRows("SELECT fts_rowid, conversation_id FROM message_fts_rowid ORDER BY fts_rowid"))
+        assertEquals(
+            indexRows("SELECT rowid, conversation_id FROM message_fts ORDER BY rowid"),
+            indexRows("SELECT fts_rowid, conversation_id FROM message_fts_rowid ORDER BY fts_rowid")
+        )
     }
 
     @Test
@@ -201,8 +203,10 @@ class MessageFtsManagerTest {
         assertEquals(before, indexedRowids())
         manager.deleteConversation(first.id.toString())
         assertEquals(listOf(second.id.toString()), manager.search("legacy").map { it.conversationId })
-        assertEquals(indexRows("SELECT rowid, conversation_id FROM message_fts ORDER BY rowid"),
-            indexRows("SELECT fts_rowid, conversation_id FROM message_fts_rowid ORDER BY fts_rowid"))
+        assertEquals(
+            indexRows("SELECT rowid, conversation_id FROM message_fts ORDER BY rowid"),
+            indexRows("SELECT fts_rowid, conversation_id FROM message_fts_rowid ORDER BY fts_rowid")
+        )
     }
 
     private suspend fun indexedRowids(): Map<String, Long> = database.withFtsReader { db ->

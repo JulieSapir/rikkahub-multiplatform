@@ -86,7 +86,12 @@ class Matrix {
 
     fun setRotate(degrees: Float): Matrix = apply { transform.setToRotation(Math.toRadians(degrees.toDouble())) }
 
-    fun setScale(scaleX: Float, scaleY: Float): Matrix = apply { transform.setToScale(scaleX.toDouble(), scaleY.toDouble()) }
+    fun setScale(scaleX: Float, scaleY: Float): Matrix = apply {
+        transform.setToScale(
+            scaleX.toDouble(),
+            scaleY.toDouble()
+        )
+    }
 
     fun reset() = transform.setToIdentity()
 
@@ -125,8 +130,11 @@ private fun applyMatrix(
     val g = out.createGraphics()
     g.setRenderingHint(
         java.awt.RenderingHints.KEY_INTERPOLATION,
-        if (filter) java.awt.RenderingHints.VALUE_INTERPOLATION_BILINEAR
-        else java.awt.RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR,
+        if (filter) {
+            java.awt.RenderingHints.VALUE_INTERPOLATION_BILINEAR
+        } else {
+            java.awt.RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR
+        },
     )
     g.translate(-bounds.x.toDouble(), -bounds.y.toDouble())
     g.transform(tx)

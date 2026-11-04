@@ -30,13 +30,13 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.key.utf16CodePoint
-import androidx.compose.ui.input.key.KeyEvent as ComposeKeyEvent
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.termux.terminal.TerminalEmulator
 import com.termux.terminal.TerminalSession
+import androidx.compose.ui.input.key.KeyEvent as ComposeKeyEvent
 
 /**
  * Termux 的 TerminalView 是 Android View（自绘 + 手势选择 + 软键盘），桌面端没有 View 层。
@@ -192,6 +192,7 @@ private val ESC_LEFT = "\u001b[D".toByteArray()
 private val ESC_HOME = "\u001b[H".toByteArray()
 private val ESC_END = "\u001b[F".toByteArray()
 private val ESC_DELETE = "\u001b[3~".toByteArray()
+
 // Ctrl+方向键是 xterm 的修饰符序列（1;5 = Ctrl），shell 里按词跳转靠它
 private val ESC_CTRL_UP = "\u001b[1;5A".toByteArray()
 private val ESC_CTRL_DOWN = "\u001b[1;5B".toByteArray()

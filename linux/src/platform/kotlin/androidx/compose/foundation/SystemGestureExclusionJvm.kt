@@ -1,8 +1,8 @@
 package androidx.compose.foundation
 
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.layout.LayoutCoordinates
-import androidx.compose.ui.Modifier
 
 /**
  * Android 的 `Modifier.systemGestureExclusion(block)` 把指定区域从系统手势（返回手势条）里排除，

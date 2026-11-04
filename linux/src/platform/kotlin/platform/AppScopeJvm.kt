@@ -14,10 +14,10 @@ import kotlinx.coroutines.SupervisorJob
  * Dispatchers.Main 在桌面端由 kotlinx-coroutines-swing 提供。
  */
 class AppScope : CoroutineScope by CoroutineScope(
-    SupervisorJob()
-        + Dispatchers.Main
-        + CoroutineName("AppScope")
-        + CoroutineExceptionHandler { _, e ->
-        Log.e("AppScope", "AppScope exception", e)
-    }
+    SupervisorJob() +
+        Dispatchers.Main +
+        CoroutineName("AppScope") +
+        CoroutineExceptionHandler { _, e ->
+            Log.e("AppScope", "AppScope exception", e)
+        }
 )

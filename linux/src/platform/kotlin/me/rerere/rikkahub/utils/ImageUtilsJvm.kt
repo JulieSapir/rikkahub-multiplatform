@@ -32,7 +32,9 @@ object ImageUtils {
         BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
         val sample = calculateInSampleSize(bounds.outWidth, bounds.outHeight, maxSize, maxSize)
         BitmapFactory.decodeByteArray(
-            bytes, 0, bytes.size,
+            bytes,
+            0,
+            bytes.size,
             BitmapFactory.Options().apply { inSampleSize = sample },
         )
     }.getOrNull()

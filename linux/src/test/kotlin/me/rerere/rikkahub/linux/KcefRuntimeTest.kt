@@ -21,7 +21,11 @@ class KcefRuntimeTest {
             TarArchiveOutputStream(GzipCompressorOutputStream(archive.outputStream())).use { tar ->
                 fun file(name: String, mode: Int = 0b110_100_100) {
                     val bytes = name.toByteArray()
-                    tar.putArchiveEntry(TarArchiveEntry("jbr/$name").apply { size = bytes.size.toLong(); this.mode = mode })
+                    tar.putArchiveEntry(TarArchiveEntry("jbr/$name").apply {
+                        size = bytes.size.toLong()
+                        this.mode =
+                            mode
+                    })
                     tar.write(bytes)
                     tar.closeArchiveEntry()
                 }
@@ -33,7 +37,10 @@ class KcefRuntimeTest {
                 file("lib/server/libjvm.so")
                 file("bin/java")
                 file("lib/../../evil.so")
-                tar.putArchiveEntry(TarArchiveEntry("jbr/lib/libjcef.so", TarArchiveEntry.LF_SYMLINK).apply { linkName = "/etc/passwd" })
+                tar.putArchiveEntry(TarArchiveEntry("jbr/lib/libjcef.so", TarArchiveEntry.LF_SYMLINK).apply {
+                    linkName =
+                        "/etc/passwd"
+                })
                 tar.closeArchiveEntry()
             }
             val out = File(dir, "out")

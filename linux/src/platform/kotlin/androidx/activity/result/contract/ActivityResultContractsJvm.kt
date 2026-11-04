@@ -6,8 +6,8 @@ import androidx.activity.result.PickVisualMediaRequest
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.swing.Swing
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.swing.Swing
 import java.io.File
 import javax.swing.JFileChooser
 import javax.swing.filechooser.FileNameExtensionFilter
@@ -164,7 +164,8 @@ internal fun pickFiles(
             isMultiSelectionEnabled = multiple
             dialogTitle = if (save) "保存文件" else "选择文件"
             if (save) {
-                selectedFile = File(suggestedName?.substringAfterLast('/').takeUnless { it.isNullOrBlank() } ?: "output.txt")
+                selectedFile =
+                    File(suggestedName?.substringAfterLast('/').takeUnless { it.isNullOrBlank() } ?: "output.txt")
             }
             if (!extensions.isNullOrEmpty()) {
                 fileFilter = FileNameExtensionFilter(

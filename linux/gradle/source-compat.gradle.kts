@@ -3,11 +3,11 @@ import org.gradle.api.file.ConfigurableFileCollection
 import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.provider.ListProperty
 import org.gradle.api.tasks.CacheableTask
-import org.gradle.api.tasks.PathSensitive
-import org.gradle.api.tasks.PathSensitivity
 import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.InputFiles
 import org.gradle.api.tasks.OutputDirectory
+import org.gradle.api.tasks.PathSensitive
+import org.gradle.api.tasks.PathSensitivity
 import org.gradle.api.tasks.TaskAction
 
 /**
@@ -38,8 +38,12 @@ abstract class RewriteCompatSourcesTask : DefaultTask() {
         val out = outputDir.get().asFile
         out.deleteRecursively()
         val sources = sourceFiles.files.toList()
+
         // 同一个文件可能有多条规则（不同改动点），按文件合并后一次改写完
-        data class Plan(val notes: MutableList<String> = mutableListOf(), val replacements: MutableList<Pair<String, String>> = mutableListOf())
+        data class Plan(
+            val notes: MutableList<String> = mutableListOf(),
+            val replacements: MutableList<Pair<String, String>> = mutableListOf()
+        )
         val plans = LinkedHashMap<Pair<String, String>, Plan>()
         rules.get().forEach { spec ->
             val parts = spec.split("|")
@@ -76,7 +80,7 @@ abstract class RewriteCompatSourcesTask : DefaultTask() {
             // 上游源码都是 UTF-8，写出时显式指定，JDK17 的 C locale 默认字符集不是它
             target.writeText(
                 buildString {
-                    appendLine("// 由 linux/gradle/source-compat.gradle.kts 从 ${packagePath}/${fileName} 生成，请勿手改")
+                    appendLine("// 由 linux/gradle/source-compat.gradle.kts 从 $packagePath/$fileName 生成，请勿手改")
                     notes.forEach { appendLine("// $it") }
                     appendLine()
                     append(text)
@@ -86,7 +90,6 @@ abstract class RewriteCompatSourcesTask : DefaultTask() {
             logger.lifecycle("source-compat: $fileName -> ${target.name}")
         }
     }
-
 }
 
 /**
@@ -240,14 +243,22 @@ val backupRules = listOf(
         "\u0002DatabaseBackup.checkpoint(room.openHelper.writableDatabase)\u0001DatabaseBackup.checkpoint(room)",
 )
 
-val compatRules: List<String> = migrationRules + databaseFactoryRules + ftsRules + backupRules + contextBuilderRules + assetIconRules + fontLoaderRules + clipboardRules + routeActivityRules + receiveContentRules + emojiBurstRules + aboutPageRules + listOf(
-    "me/rerere/rikkahub/ui/components/ui|ErrorCard.kt|" +
-        "Android 的 ClipEntry(clipData = ...) 具名参数在 JB 端是 nativeClipEntry，位置传参即可|" +
-        "clipData =\u0001",
-    "me/rerere/rikkahub/ui/components/ai|ChatInput.kt|" +
-        "JB 桌面端的 DialogProperties 没有 decorFitsSystemWindows（Android 的窗口 inset 概念）|" +
-        ", decorFitsSystemWindows = false\u0001",
-)
+val compatRules: List<String> =
+    migrationRules + databaseFactoryRules + ftsRules + backupRules + contextBuilderRules + assetIconRules +
+        fontLoaderRules +
+        clipboardRules +
+        routeActivityRules +
+        receiveContentRules +
+        emojiBurstRules +
+        aboutPageRules +
+        listOf(
+            "me/rerere/rikkahub/ui/components/ui|ErrorCard.kt|" +
+                "Android 的 ClipEntry(clipData = ...) 具名参数在 JB 端是 nativeClipEntry，位置传参即可|" +
+                "clipData =\u0001",
+            "me/rerere/rikkahub/ui/components/ai|ChatInput.kt|" +
+                "JB 桌面端的 DialogProperties 没有 decorFitsSystemWindows（Android 的窗口 inset 概念）|" +
+                ", decorFitsSystemWindows = false\u0001",
+        )
 
 // 同一文件可登记多个改写点；原文件只排除一次，输入也只登记一次。
 val compatSourcePaths = compatRules.map { spec ->

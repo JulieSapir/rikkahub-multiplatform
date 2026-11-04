@@ -123,7 +123,14 @@ internal class FileSharedPreferences(private val file: File) : SharedPreferences
             }
             persist()
             val snapshot = synchronized(listeners) { listeners.toList() }
-            changed.forEach { key -> snapshot.forEach { it.onSharedPreferenceChanged(this@FileSharedPreferences, key) } }
+            changed.forEach { key ->
+                snapshot.forEach {
+                    it.onSharedPreferenceChanged(
+                        this@FileSharedPreferences,
+                        key
+                    )
+                }
+            }
         }
     }
 
@@ -150,4 +157,3 @@ internal class FileSharedPreferences(private val file: File) : SharedPreferences
 /** Context.getSharedPreferences(name, mode) */
 internal fun contextSharedPreferences(context: Context, name: String): SharedPreferences =
     FileSharedPreferences.of(File(context.noBackupFilesDir, "preferences/$name.properties"))
-

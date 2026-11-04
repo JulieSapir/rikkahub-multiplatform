@@ -1,8 +1,8 @@
 package android.widget
 
 import android.content.Context
-import java.util.Locale
 import me.rerere.rikkahub.linux.res.RikkaRes
+import java.util.Locale
 
 /**
  * 桌面端没有 Toast：把消息打到标准错误，调用方（错误提示、复制成功之类）保持原样。

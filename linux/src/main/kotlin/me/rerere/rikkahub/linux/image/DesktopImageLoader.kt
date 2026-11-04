@@ -2,9 +2,9 @@ package me.rerere.rikkahub.linux.image
 
 import coil3.map.Mapper
 import coil3.request.Options
-import java.io.File
 import me.rerere.rikkahub.linux.res.DesktopAssets
 import me.rerere.rikkahub.linux.res.RikkaRes
+import java.io.File
 
 /**
  * 上游在 RouteActivity 里用 setSingletonImageLoaderFactory 配 Coil，Android 上有两种数据源是框架自带
