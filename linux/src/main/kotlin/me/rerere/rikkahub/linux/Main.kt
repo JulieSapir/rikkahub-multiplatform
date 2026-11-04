@@ -7,6 +7,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.graphics.toComposeImageBitmap
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.ApplicationScope
@@ -14,6 +15,7 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import me.rerere.rikkahub.RouteActivity
+import me.rerere.rikkahub.linux.clip.DesktopPlatformClipboard
 import me.rerere.rikkahub.linux.desktop.DesktopBootstrap
 import me.rerere.rikkahub.linux.di.desktopPlatformModule
 import org.jetbrains.skia.Image
@@ -49,6 +51,7 @@ fun main() {
 @Composable
 private fun ApplicationScope.DesktopWindow(activity: RouteActivity) {
     val content = remember(activity) { DesktopActivityContent.contentOf(activity) }
+    val clipboard = remember { DesktopPlatformClipboard() }
     val icon = remember {
         val bytes = checkNotNull(ClassLoader.getSystemResourceAsStream("icons/rikkahub.png"))
             .use { it.readBytes() }
@@ -61,7 +64,10 @@ private fun ApplicationScope.DesktopWindow(activity: RouteActivity) {
         state = rememberWindowState(width = 1280.dp, height = 860.dp),
     ) {
         content?.let {
-            CompositionLocalProvider(LocalContext provides activity) { it() }
+            CompositionLocalProvider(
+                LocalContext provides activity,
+                LocalClipboard provides clipboard,
+            ) { it() }
         }
     }
 }
